@@ -1,0 +1,5 @@
+{
+  "biomes": "#minecraft:is_overworld",
+  "provider": "mic_climate:unified",
+  "priority": 2000
+}

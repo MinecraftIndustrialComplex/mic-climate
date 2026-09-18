@@ -1,0 +1,285 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.74'
+}
+
+version = mod_version
+group   = mod_group_id
+
+base {
+    archivesName = "${mod_id}-${minecraft_version}"
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://maven.createmod.net' }
+    maven { url = 'https://mvn.devos.one/snapshots' }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+        filter {
+            includeGroup 'maven.modrinth'
+        }
+    }
+    flatDir {
+        dirs "${project.projectDir}/../Destroy/_Migration-Toolkit-1.21/petrolpark_local_maven/petrolpark/petrolpark-${minecraft_version}/${petrolpark_library_version}"
+    }
+}
+
+neoForge {
+    version = project.neo_version
+
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
+
+    runs {
+        client {
+            client()
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+        }
+        server {
+            server()
+            programArgument '--nogui'
+        }
+
+        // `./gradlew runGameTestServer` -- a headless dedicated server that runs
+        // every @GameTest in the mic_climate namespace and exits with the number
+        // of failed required tests (0 when they all pass).
+        //
+        // Its classpath is the project's runtimeClasspath, which the localRuntime
+        // configuration below fills with the pack's whole temperature graph. That
+        // is the point of the run: mic_climate is nothing but mixins into other
+        // mods, and with `defaultRequire: 1` in mic_climate.mixins.json the boot
+        // itself is the first assertion -- a mixin that no longer matches its
+        // target fails the launch rather than silently doing nothing.
+        gameTestServer {
+            type = 'gameTestServer'
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'mic_climate'
+            // Unlocks ClimateConfig.Test, the only way a test can move a config
+            // value; nothing else sets this property, so a normal game cannot.
+            systemProperty 'mic_climate.gametest', 'true'
+            jvmArgument '-Xmx6G'
+            // Mixin logs "Mixing <mixin> into <target>" at DEBUG. Off by default
+            // because it turns a 500-line log into a 5000-line one; turn it on
+            // with -PgametestDebugLog when the question is whether a mixin bound.
+            if (project.hasProperty('gametestDebugLog')) logLevel = org.slf4j.event.Level.DEBUG
+            gameDirectory = file('run-gametest')
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+configurations {
+    runtimeClasspath.extendsFrom localRuntime
+}
+
+// The Create stack is on the *compile* classpath as the ':slim' artifact, which
+// carries a neoforge.mods.toml but none of Create's jar-in-jar dependencies. The
+// gametest run needs the full Create jar (localRuntime, below) instead, and two
+// jars declaring modId "create" is a hard FML failure -- so the compile-side
+// Create stack is kept off the runtime classpath entirely. Ponder, Flywheel and
+// Registrate go with it: the pack ships none of them separately because the full
+// Create jar contains them.
+// gametest-client.sh needs the same mod set as a folder of jars rather than as a
+// classpath, because a real client loads mods from run/mods. This is the only
+// resolvable view of localRuntime; nothing else consumes it.
+configurations {
+    gametestClientMods {
+        canBeConsumed = false
+        canBeResolved = true
+        extendsFrom localRuntime
+    }
+    gametestClientOnly {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+// Mods a real client needs that a dedicated server does not. Destroy's client
+// setup registers JEI recipe categories against mezz.jei.api directly, so a
+// client without JEI dies in Destroy's deferred work queue during resource
+// reload -- long before any test runs.
+dependencies {
+    gametestClientOnly "maven.modrinth:jei:${jei_version}"
+}
+
+tasks.register('collectClientMods', Sync) {
+    // Sync, not Copy: the mod set changes (-PwithAtmosphere, or a dependency
+    // dropped) and a stale jar left behind is a mod the client still loads.
+    description = 'Stages the gametest runtime mods, plus this mod, for gametest-client.sh.'
+    group = 'verification'
+    from configurations.gametestClientMods
+    from configurations.gametestClientOnly
+    from tasks.named('jar')
+    into layout.buildDirectory.dir('gametest-client/mods')
+}
+
+configurations.runtimeClasspath {
+    exclude group: 'com.simibubi.create'
+    exclude group: 'net.createmod.ponder'
+    exclude group: 'dev.engine-room.flywheel'
+    exclude group: 'com.tterrag.registrate'
+}
+
+dependencies {
+    // Thermoo API + the Fabric API events it exposes. Required at runtime, but
+    // shipped by the pack, so compileOnly here.
+    compileOnly("maven.modrinth:thermoo:${thermoo_version}")
+    compileOnly("maven.modrinth:forgified-fabric-api:${ffapi_version}")
+
+    // Create stack: needed because Power Grid's and Destroy's classes reference
+    // Create types (SmartBlockEntity, BlockEntityBehaviour, ...).
+    implementation("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") {
+        transitive = false
+    }
+    implementation("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
+    implementation("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
+    implementation("com.tterrag.registrate:Registrate:${registrate_version}")
+
+    // Bridged mods -- compileOnly, all optional at runtime.
+    compileOnly("maven.modrinth:power-grid:${powergrid_version}")
+    compileOnly(files("${project.projectDir}/../Destroy/a/b/c/build/libs/destroy-${minecraft_version}-${destroy_version}.jar"))
+    compileOnly("petrolpark:petrolpark-${minecraft_version}:${petrolpark_library_version}")
+    compileOnly("maven.modrinth:legendary-survival-overhaul:${lso_version}")
+    // Project Atmosphere is not on the Modrinth maven at all -- the pack pins it
+    // from CurseForge (project 1258344, file 8541023). The file below is the
+    // byte-identical artifact (sha1 a8e2c9b380623315b51e0c5bd4341080a2a45ab5).
+    // compileOnly only -- never bundled or redistributed; its licence permits
+    // compatible addons but forbids redistribution and modified builds.
+    compileOnly(files("${project.projectDir}/libs/NeoForge-projectatmosphere-${project_atmosphere_version_number}.jar"))
+    compileOnly("maven.modrinth:create-crowns:${crowns_version}")
+
+    // ------------------------------------------------------------------
+    // GameTest runtime (phase 5). Nothing below is on any compile classpath;
+    // these are the mods the headless server loads so that every bridge in this
+    // mod has something real to bind to. Keep this list in step with the pack.
+    // ------------------------------------------------------------------
+
+    // The currency itself, and the Fabric API it is built on.
+    localRuntime("maven.modrinth:thermoo:${thermoo_version}")
+    localRuntime("maven.modrinth:forgified-fabric-api:${ffapi_version}")
+
+    // Seasons: Thermoo Patches bridges Serene Seasons into Thermoo's season
+    // event, which is what BiomeSeasonFallback reads.
+    localRuntime("maven.modrinth:thermoo-patches:${thermoo_patches_version}")
+    localRuntime("maven.modrinth:yacl:${yacl_version}")
+    localRuntime("maven.modrinth:serene-seasons:${sereneseasons_version}")
+    localRuntime("maven.modrinth:glitchcore:${glitchcore_version}")
+    // Gabou's Libs is CurseForge-only, so there is no maven coordinate for it;
+    // the file here is byte-identical to pack/mods/gabous-libs.pw.toml
+    // (sha1 aa39c5645c0479dbd7a485432e9694c78ad6082a). Never bundled.
+    localRuntime(files("${project.projectDir}/libs/gaboulibs-neoforge-${gaboulibs_version_number}.jar"))
+
+    // Create and the two Create addons this mod mixes into.
+    localRuntime("maven.modrinth:create:${create_runtime_version}")
+    localRuntime("maven.modrinth:architectury-api:${architectury_version}")
+    localRuntime("maven.modrinth:power-grid:${powergrid_version}")
+    localRuntime("maven.modrinth:create-crowns:${crowns_version}")
+    localRuntime("maven.modrinth:formicapi:${formicapi_version}")
+
+    // Destroy, from the same local build the compileOnly line uses, plus its
+    // Petrolpark library.
+    localRuntime(files("${project.projectDir}/../Destroy/a/b/c/build/libs/destroy-${minecraft_version}-${destroy_version}.jar"))
+    localRuntime("petrolpark:petrolpark-${minecraft_version}:${petrolpark_library_version}")
+
+    // The survival mod the LSO bridge registers its modifiers on.
+    localRuntime("maven.modrinth:legendary-survival-overhaul:${lso_version}")
+
+    // ---- Project Atmosphere: still OFF by default, but no longer broken. ----
+    //
+    // History, because it is the reason this branch exists at all. Project
+    // Atmosphere 0.8.1.0's ServerLevelSnowStormMixin declared
+    //   implements com.Gabou.sereneseasonsplus.features.snowstorm.ISnowStormLevel
+    // and Serene Seasons Plus deleted that interface in 5.0. The reference is
+    // hard -- no @Pseudo, no config plugin, and projectatmosphere.mixins.json is
+    // "required": true with defaultRequire 1 -- so the mixin applied anyway,
+    // ServerLevel gained an interface that did not exist, and the JVM died in
+    // net.minecraft.server.Bootstrap with "Cannot find class". The pack pinned
+    // 0.8.1.0 against Serene Seasons Plus 5.1.2 and therefore could not load a
+    // world at all, singleplayer included.
+    //
+    // The pack now pins Project Atmosphere 0.9.1.2 and Gabou's Libs 1.9, which
+    // fixes it at the source: 0.9.1.2's mixin implements
+    // net.Gabou.gaboulibs.util.ISnowStormLevel, Gabou's Libs 1.9 ships that
+    // class, and Project Atmosphere declares sereneseasonsplus [5.1.1,) instead
+    // of being built against 4.x. So this branch now runs the pack's own three
+    // pins -- Serene Seasons Plus 5.1.2, Simple Clouds 0.7.3, Gabou's Libs 1.9 --
+    // rather than a downgrade, and Better Days is gone from it: that was only
+    // ever here because Serene Seasons Plus 4.2.3 called
+    // betterdays.config.ConfigHandler unguarded on every level tick.
+    //
+    //   ./gradlew runGameTestServer -PwithAtmosphere
+    //
+    // It stays off by default because the default runtime is the smaller, faster
+    // graph that every non-atmosphere assertion needs, and because on a real
+    // client Serene Seasons Plus opens a modal PerformanceWarning screen that
+    // mc-runtime-test cannot get past. AtmosphereGameTests skips itself through
+    // the same Compat.isLoaded guard the mod uses when it is not here.
+    if (project.hasProperty('withAtmosphere')) {
+        // The pack's own pin, and what Project Atmosphere 0.9.1.2 asks for.
+        localRuntime("maven.modrinth:serene-seasons-plus:${sereneseasons_plus_version}")
+        // Hard dependency of Project Atmosphere ([0.7.3,)). Kept out of the
+        // default set because without Project Atmosphere it is actively harmful
+        // on a client: CloudSpawningDataManager.getInstance() throws "Not
+        // initialized" during ServerLevel construction and kills world creation.
+        // (A dedicated server never reaches that path.)
+        localRuntime("maven.modrinth:simple-clouds:${simple_clouds_version}")
+        localRuntime(files("${project.projectDir}/libs/NeoForge-projectatmosphere-${project_atmosphere_version_number}.jar"))
+    }
+    // Serene Seasons itself stays in the default set regardless: Thermoo Patches
+    // bridges it into Thermoo's season event, which is what BiomeSeasonFallback
+    // reads. Serene Seasons *Plus* is a Project Atmosphere dependency only --
+    // nothing this mod does touches it.
+
+    // The sibling addon, so Destroy's Vat carries a Power Grid ThermalBehaviour
+    // at runtime -- which is what vatThermalBehaviourVisible asserts.
+    localRuntime(files("${project.projectDir}/../mic-destroy-electric/build/libs/mic_destroy_electric-${minecraft_version}-${mic_destroy_electric_version}.jar"))
+}
+
+var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    var replaceProperties = [
+        minecraft_version      : minecraft_version,
+        minecraft_version_range: minecraft_version_range,
+        neo_version            : neo_version,
+        neo_version_range      : neo_version_range,
+        loader_version_range   : loader_version_range,
+        mod_id                 : mod_id,
+        mod_name               : mod_name,
+        mod_license            : mod_license,
+        mod_version            : mod_version,
+        mod_authors            : mod_authors,
+        mod_description        : mod_description
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from 'src/main/templates'
+    into 'build/generated/sources/modMetadata'
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

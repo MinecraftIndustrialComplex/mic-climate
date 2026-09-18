@@ -1,0 +1,95 @@
+modLoader   = "javafml"
+loaderVersion = "${loader_version_range}"
+license     = "${mod_license}"
+
+[[mixins]]
+config = "mic_climate.mixins.json"
+
+[[mods]]
+modId       = "${mod_id}"
+version     = "${mod_version}"
+displayName = "${mod_name}"
+authors     = "${mod_authors}"
+description = '''${mod_description}'''
+
+[[dependencies.${mod_id}]]
+    modId        = "minecraft"
+    type         = "required"
+    versionRange = "${minecraft_version_range}"
+    ordering     = "NONE"
+    side         = "BOTH"
+
+[[dependencies.${mod_id}]]
+    modId        = "neoforge"
+    type         = "required"
+    versionRange = "${neo_version_range}"
+    ordering     = "NONE"
+    side         = "BOTH"
+
+# The shared temperature currency. Everything this mod does is either feeding
+# Thermoo's environment lookup or making another mod read it.
+[[dependencies.${mod_id}]]
+    modId        = "thermoo"
+    type         = "required"
+    versionRange = "[4.8,)"
+    ordering     = "AFTER"
+    side         = "BOTH"
+
+# Thermoo's own hard dependency: its registries and season events are built on
+# the Fabric API, which on NeoForge means Forgified Fabric API.
+[[dependencies.${mod_id}]]
+    modId        = "fabric_api"
+    type         = "required"
+    versionRange = "[0,)"
+    ordering     = "AFTER"
+    side         = "BOTH"
+
+# Bridges. Each is gated at load time by the mixin config plugin and at call
+# time by Compat.isLoaded, so any subset of these may be absent.
+
+[[dependencies.${mod_id}]]
+    modId        = "powergrid"
+    type         = "optional"
+    versionRange = "[0.6.0,)"
+    ordering     = "AFTER"
+    side         = "BOTH"
+
+[[dependencies.${mod_id}]]
+    modId        = "destroy"
+    type         = "optional"
+    versionRange = "[0.4.1,)"
+    ordering     = "AFTER"
+    side         = "BOTH"
+
+# The preferred temperature source: with it installed the pack follows real
+# weather instead of a biome constant.
+[[dependencies.${mod_id}]]
+    modId        = "projectatmosphere"
+    type         = "optional"
+    versionRange = "[0,)"
+    ordering     = "AFTER"
+    side         = "BOTH"
+
+# Supplies Thermoo with Serene Seasons' season, which the biome fallback uses.
+[[dependencies.${mod_id}]]
+    modId        = "thermoo_patches"
+    type         = "optional"
+    versionRange = "[0,)"
+    ordering     = "AFTER"
+    side         = "BOTH"
+
+# Consumers added in later phases; declared now so load order is already right.
+
+[[dependencies.${mod_id}]]
+    modId        = "legendarysurvivaloverhaul"
+    type         = "optional"
+    versionRange = "[0,)"
+    ordering     = "AFTER"
+    side         = "BOTH"
+
+[[dependencies.${mod_id}]]
+    modId        = "crowns"
+    type         = "optional"
+    versionRange = "[0,)"
+    ordering     = "AFTER"
+    side         = "BOTH"

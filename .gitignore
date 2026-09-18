@@ -1,0 +1,17 @@
+.gradle/
+build/
+bin/
+.direnv/
+.eclipse/
+.settings/
+run/
+
+# Local test-server runtimes. Both hold a full downloaded copy of the pack's
+# jars, plus logs and an rcon password -- never publish these.
+run-gametest/
+smoke/
+
+# Third-party mod jars used as compileOnly/localRuntime inputs. Project
+# Atmosphere's licence forbids redistribution, so these stay local; see the
+# comments around the `libs/` lines in build.gradle for how to obtain them.
+libs/

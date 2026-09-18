@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.minecraftindustrialcomplex.mic_climate.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "com.minecraftindustrialcomplex.mic_climate.mixin.MicClimateMixinPlugin",
+  "mixins": [
+    "powergrid.ThermalBehaviourMixin",
+    "powergrid.LightBulbStateMixin",
+    "powergrid.SolarPanelBlockEntityMixin",
+    "powergrid.CeilingTileSolarBlockEntityMixin",
+    "destroy.PollutionHelperMixin",
+    "crowns.PhysicsWorldDataMixin",
+    "crowns.PhysicsSaveManagerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
