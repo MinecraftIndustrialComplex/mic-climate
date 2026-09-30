@@ -530,3 +530,18 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
     season); the south is inverted in every column; at 15 N the season is faded (Late Spring in midwinter). Project
     Atmosphere's level-wide season stayed winter / summer throughout. Its snow/freeze temperature is Deep Time's
     (phase 8), which already had each hemisphere's season.
+  - **Pack smoke** (`smoke/install.sh` + `run.py`, the pack's HEAD snapshot, 166 mods, no Deep Time): **20/20**; the
+    log says "Hemisphere seasons not applied: Deep Time is not installed". (The pack's working tree on the Mac failed
+    packwiz's hash check for `destroy_metallurgy_integration.js`, a peer's uncommitted edit, so the run used Deep
+    Time's re-indexed HEAD snapshot through `MIC_PACK`.)
+  - **Real client** (Deep Time's `tools/client/mac-screenshots.sh` on the Mac's desktop; Deep Time
+    `climate-latitude-api`, Toroidal World, Serene Seasons 10.1.0.3, GlitchCore, Thermoo, Forgified Fabric API and
+    this jar, as `-PrunSet=seasons-client`; the same planet, Serene Seasons starting at Mid Autumn): forest at
+    41.5° N (−3008, −1888) and birch forest at 40.8° N (−2912, −1856) are autumn orange, forest at 44.3° S (−3008,
+    2016) and birch forest at 45° S (−2976, 2048) are spring green, in the same world at the same moment; spruce
+    stays evergreen. The planet info arrived before the first chunks were meshed, so the re-mesh trigger had
+    nothing to do (not exercised). Screenshots: Deep Time `review/out/seasons-client2/11-vista-{0..3}.png`.
+  - **Deep Time GameTests** (`climate-latitude-api`, `./gametest.sh`): 51/52; `climateApiIsEmptyElsewhere` passes
+    with the new checks (API 2, the synthetic planet's C = 1024 from the generator, 0 elsewhere, latitude); the one
+    failure, `climateConsistent` (Köppen families below their floor on the baked test planet), touches no code the
+    branch changed.

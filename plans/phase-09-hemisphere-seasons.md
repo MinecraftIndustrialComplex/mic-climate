@@ -212,7 +212,10 @@ the equator so the test's own blocks sit at any latitude):
   level-wide one stays winter; southern sunlight is stronger.
 
 On a real Deep Time planet: Deep Time's `tools/review/seasons-probe.sh` (branch
-`climate-latitude-api`). Results in PLAN.md's build log.
+`climate-latitude-api`), a MIC server probing 32 places at 45 N, 15 N, the equator and 45 S in northern
+midwinter and midsummer; its Mixin export confirms every server injector landed. On a real client: Deep
+Time's `tools/client/mac-screenshots.sh` with a small mod set (`-PrunSet`), vistas over forests at about
+41 N and 45 S in the same Mid Autumn. Results in PLAN.md's build log.
 
 ## Credit
 
