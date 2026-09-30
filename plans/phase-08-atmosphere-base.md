@@ -166,7 +166,8 @@ can disagree with the server's ice and snow layers in mid-latitude biomes. The e
 tropics) agree, because Deep Time picks those biomes from its climate.
 
 **Serene Seasons' own effects and Project Atmosphere's seasonal humidity, pressure and
-cloud-water modifiers stay global** (northern). Only temperature is per hemisphere.
+cloud-water modifiers stay global** (northern). Only temperature is per hemisphere. (Phase 9,
+`plans/phase-09-hemisphere-seasons.md`, makes both follow latitude on Deep Time planets.)
 
 **A region's live temperature can lag its base, and then its anomaly is large until Project
 Atmosphere simulates it again.** The cap (`deepTime.maxAnomaly`) bounds it. Three ways it happens:

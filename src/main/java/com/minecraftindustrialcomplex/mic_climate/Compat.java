@@ -20,6 +20,7 @@ public final class Compat {
     public static final String CROWNS = "crowns";
     public static final String DEEP_TIME = "deeptime";
     public static final String SERENE_SEASONS = "sereneseasons";
+    public static final String SERENE_SEASONS_PLUS = "sereneseasonsplus";
 
     private Compat() {}
 

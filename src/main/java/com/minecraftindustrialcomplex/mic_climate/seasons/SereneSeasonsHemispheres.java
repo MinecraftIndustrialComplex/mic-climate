@@ -1,0 +1,280 @@
+package com.minecraftindustrialcomplex.mic_climate.seasons;
+
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.minecraftindustrialcomplex.mic_climate.MicClimate;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.server.level.ChunkMap;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.FoliageColor;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.chunk.LevelChunk;
+import org.jetbrains.annotations.Nullable;
+import sereneseasons.api.season.ISeasonState;
+import sereneseasons.api.season.Season;
+import sereneseasons.config.SeasonsConfig;
+import sereneseasons.init.ModConfig;
+
+import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * The runtime side of the hemisphere-season mixins into Serene Seasons and Serene Seasons Plus
+ * ({@code mixin.seasons}): what each of their decision points should see at a position on a Deep
+ * Time planet ({@link LatitudeSeasons}, {@link PlanetLatitude}).
+ *
+ * <p>Every entry point hands back exactly what the patched mod computed when the position is not
+ * on a Deep Time planet, when the seasons are switched off, north of the full-season latitude
+ * (where the level's season is the local one), or on any exception (logged once). Serene Seasons'
+ * own code does the work in every case: these only choose which sub-season it works with, or
+ * blend two of its own answers.
+ *
+ * <p>Serene Seasons is All Rights Reserved; nothing of it is copied here. The mixins name its
+ * classes and methods, and this class calls its public API and public static helpers.
+ */
+public final class SereneSeasonsHemispheres {
+
+    private static final AtomicBoolean LOGGED_FAILURE = new AtomicBoolean();
+
+    /**
+     * The chunk the melt pass last handled, so the level's remaining melt rolls for it are skipped
+     * ({@link #melt}). Server thread only; reset at the start of every pass.
+     */
+    @Nullable
+    private static LevelChunk lastMeltChunk;
+
+    private SereneSeasonsHemispheres() {}
+
+    // ------------------------------------------------------------------
+    // Serene Seasons: temperature, fertility, sensor, birch.
+    // ------------------------------------------------------------------
+
+    /**
+     * Serene Seasons' seasonal biome temperature at {@code pos} ({@code SeasonHooks.getBiomeTemperature}):
+     * its own {@code getBiomeTemperatureInSeason} for the local (shifted) sub-season, blended toward
+     * its value for Mid Summer by the season's strength. Everything that decides snow, ice, rain or
+     * snow and melting through Serene Seasons reads this.
+     */
+    public static float biomeTemperature(Level level, Season.SubSeason global, Holder<Biome> biome, BlockPos pos,
+                                         Operation<Float> inSeason) {
+        double lat;
+        try {
+            lat = pos == null ? Double.NaN : PlanetLatitude.latitude(level, pos.getZ());
+        } catch (Throwable t) {
+            logOnce(t);
+            lat = Double.NaN;
+        }
+        if (Double.isNaN(lat))
+            return inSeason.call(global, biome, pos);
+        double w = PlanetLatitude.strength(lat);
+        if (LatitudeSeasons.unchanged(lat, w))
+            return inSeason.call(global, biome, pos);
+        float seasonal = inSeason.call(LatitudeSeasons.shifted(global, lat), biome, pos);
+        if (w >= 1.0)
+            return seasonal;
+        float neutral = inSeason.call(LatitudeSeasons.NEUTRAL, biome, pos);
+        return LatitudeSeasons.lerp(neutral, seasonal, w);
+    }
+
+    /**
+     * The season state a discrete decision at {@code pos} should see: shifted for the hemisphere and
+     * pulled toward Mid Summer where the seasons fade. Crop fertility, the season sensor and Project
+     * Atmosphere's regional season use it. {@code global} when there is nothing to change.
+     */
+    public static ISeasonState discreteState(Level level, @Nullable BlockPos pos, ISeasonState global) {
+        return localState(level, pos, global, true);
+    }
+
+    /** The season state for a blended quantity at {@code pos}: shifted, not faded (the caller fades). */
+    public static ISeasonState shiftedState(Level level, @Nullable BlockPos pos, ISeasonState global) {
+        return localState(level, pos, global, false);
+    }
+
+    private static ISeasonState localState(Level level, @Nullable BlockPos pos, ISeasonState global, boolean discrete) {
+        if (global == null || pos == null)
+            return global;
+        try {
+            double lat = PlanetLatitude.latitude(level, pos.getZ());
+            if (Double.isNaN(lat))
+                return global;
+            double w = PlanetLatitude.strength(lat);
+            if (LatitudeSeasons.unchanged(lat, w))
+                return global;
+            return new LocalSeasonState(global, lat, w, discrete);
+        } catch (Throwable t) {
+            logOnce(t);
+            return global;
+        }
+    }
+
+    /**
+     * A birch leaf colour Serene Seasons computed for the local season, blended toward vanilla's
+     * birch colour (Mid Summer's) by the season's strength at {@code pos}.
+     */
+    public static int birchColour(Level level, @Nullable BlockPos pos, int colour) {
+        if (pos == null)
+            return colour;
+        try {
+            double lat = PlanetLatitude.latitude(level, pos.getZ());
+            if (Double.isNaN(lat))
+                return colour;
+            return LatitudeSeasons.lerpRgb(FoliageColor.getBirchColor(), colour, PlanetLatitude.strength(lat));
+        } catch (Throwable t) {
+            logOnce(t);
+            return colour;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Serene Seasons: melting (RandomUpdateHandler.onWorldTick).
+    // ------------------------------------------------------------------
+
+    /** Start of a melt pass. */
+    public static void resetMelt() {
+        lastMeltChunk = null;
+    }
+
+    /**
+     * The melt chance (percent) Serene Seasons' melt pass gates its chunk loop on. On a planet the
+     * loop has to run whenever the season melts snow anywhere, so this is the largest chance of any
+     * sub-season; {@link #melt} then applies each chunk's own.
+     */
+    public static float meltLoopChance(ServerLevel level, float chance) {
+        try {
+            if (!onPlanet(level))
+                return chance;
+            float max = chance;
+            for (Season.SubSeason s : Season.SubSeason.VALUES)
+                max = Math.max(max, ModConfig.seasons.getSeasonProperties(s).meltChance());
+            return max;
+        } catch (Throwable t) {
+            logOnce(t);
+            return chance;
+        }
+    }
+
+    /** The melt rolls per chunk the loop runs: as {@link #meltLoopChance}, the largest of any sub-season. */
+    public static int meltLoopRolls(ServerLevel level, int rolls) {
+        try {
+            if (!onPlanet(level))
+                return rolls;
+            int max = rolls;
+            for (Season.SubSeason s : Season.SubSeason.VALUES)
+                max = Math.max(max, ModConfig.seasons.getSeasonProperties(s).meltRolls());
+            return max;
+        } catch (Throwable t) {
+            logOnce(t);
+            return rolls;
+        }
+    }
+
+    /**
+     * One of Serene Seasons' melt rolls in {@code chunk}. On a planet the first roll for a chunk
+     * runs that chunk's own number of rolls at its own chance (its discrete local sub-season's melt
+     * properties from Serene Seasons' config; the level's own sub-season north of the full-season
+     * latitude), and the loop's remaining rolls for it are skipped: the loop itself runs at the
+     * largest chance and roll count of any sub-season ({@link #meltLoopChance}). Serene Seasons' own
+     * {@code meltInChunk} does each roll, temperature test included. Off a planet the call is
+     * Serene Seasons' own.
+     */
+    public static void melt(ServerLevel level, Season.SubSeason global, ChunkMap map, LevelChunk chunk, float chance,
+                            Operation<Void> meltInChunk) {
+        Season.SubSeason local;
+        try {
+            local = localSubSeason(level, chunk.getPos(), global);
+        } catch (Throwable t) {
+            logOnce(t);
+            local = null;
+        }
+        if (local == null) {
+            meltInChunk.call(map, chunk, chance);
+            return;
+        }
+        if (chunk == lastMeltChunk)
+            return;
+        lastMeltChunk = chunk;
+        SeasonsConfig.SeasonProperties p = ModConfig.seasons.getSeasonProperties(local);
+        float localChance = p.meltChance() / 100f;
+        for (int i = 0; i < p.meltRolls(); i++)
+            meltInChunk.call(map, chunk, localChance);
+    }
+
+    // ------------------------------------------------------------------
+    // Serene Seasons Plus: its per-chunk snow policy.
+    // ------------------------------------------------------------------
+
+    /**
+     * The sub-season Serene Seasons Plus's snow policy should judge {@code chunk} by
+     * ({@code SnowAccumulationPolicy.evaluateChunk}): its discrete local sub-season at the chunk's
+     * middle. {@code global} (Serene Seasons Plus's own, global one) off a planet.
+     */
+    public static Season.SubSeason snowPolicySeason(ServerLevel level, ChunkPos chunk, Season.SubSeason global) {
+        if (global == null || chunk == null)
+            return global;
+        try {
+            Season.SubSeason local = localSubSeason(level, chunk, global);
+            return local == null ? global : local;
+        } catch (Throwable t) {
+            logOnce(t);
+            return global;
+        }
+    }
+
+    /**
+     * The discrete local sub-season at a chunk's middle ({@code global} itself north of the
+     * full-season latitude), or null off a planet.
+     */
+    @Nullable
+    private static Season.SubSeason localSubSeason(Level level, ChunkPos chunk, Season.SubSeason global) {
+        double lat = PlanetLatitude.latitude(level, chunk.getMiddleBlockZ());
+        if (Double.isNaN(lat))
+            return null;
+        return LatitudeSeasons.discrete(global, lat, PlanetLatitude.strength(lat));
+    }
+
+    // ------------------------------------------------------------------
+    // Diagnostics.
+    // ------------------------------------------------------------------
+
+    /** Whether the hemisphere seasons apply anywhere in {@code level}. */
+    public static boolean onPlanet(Level level) {
+        return PlanetLatitude.switchedOn() && PlanetLatitude.circumference(level) > 0;
+    }
+
+    /**
+     * What a position's seasons are, for {@code /mic_climate probe} and the GameTests.
+     *
+     * @param latitude  degrees north (NaN off a planet)
+     * @param strength  the season's strength (1 off a planet)
+     * @param global    Serene Seasons' own sub-season for the level
+     * @param shifted   the hemisphere's sub-season (what colours and temperature blend from)
+     * @param discrete  the sub-season decisions use (crops, melting, the sensor, Serene Seasons Plus,
+     *                  Project Atmosphere)
+     */
+    public record Here(double latitude, double strength, Season.SubSeason global, Season.SubSeason shifted,
+                       Season.SubSeason discrete) {
+
+        public String describe() {
+            if (Double.isNaN(latitude))
+                return String.format(Locale.ROOT, "%s everywhere (not a Deep Time planet, or switched off)", global);
+            return String.format(Locale.ROOT, "lat %.1f%s, strength %.2f; level %s -> hemisphere %s, decisions %s",
+                    Math.abs(latitude), latitude < 0 ? "S" : "N", strength, global, shifted, discrete);
+        }
+    }
+
+    public static Here here(Level level, BlockPos pos, ISeasonState global) {
+        Season.SubSeason g = global.getSubSeason();
+        double lat = PlanetLatitude.latitude(level, pos.getZ());
+        if (Double.isNaN(lat))
+            return new Here(lat, 1.0, g, g, g);
+        double w = PlanetLatitude.strength(lat);
+        return new Here(lat, w, g, LatitudeSeasons.shifted(g, lat), LatitudeSeasons.discrete(g, lat, w));
+    }
+
+    private static void logOnce(Throwable t) {
+        if (LOGGED_FAILURE.compareAndSet(false, true))
+            MicClimate.LOGGER.warn("Hemisphere seasons failed; Serene Seasons keeps its own season there", t);
+    }
+}

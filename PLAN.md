@@ -274,6 +274,9 @@ Recommendation: move; the pack always ships both.
 | `powergrid.enabled` / `destroy.enabled` / `lso.enabled` / `crowns.enabled` | true | per-bridge switches |
 | `lso.neutralCelsius`, `lso.unitsPerDegree` | 20, 0.24 | world modifier mapping |
 | `lso.deviceHeat.enabled`, `.tempScalar`, `.rangeScalar` | true, 0.04, 0.5 | device proximity heat |
+| `deepTime.enabled`, `.weatherAnomaly`, `.maxAnomaly` | true, true, 20 | phase 7: Deep Time's climate as the base |
+| `deepTime.projectAtmosphereBase` | true | phase 8: Deep Time's climate as Project Atmosphere's base |
+| `deepTime.hemisphereSeasons`, `.fullSeasonLatitude` | true, 45 | phase 9: seasons by latitude on Deep Time planets |
 
 ## 8. Licensing
 
@@ -283,7 +286,14 @@ Recommendation: move; the pack always ships both.
   with one exception Ben chose on 2026-09-30 ("Mixin anyway"): the optional Deep Time base hook
   (phase 8, `plans/phase-08-atmosphere-base.md`) mixes into five of its classes at runtime, in its
   own config, only for Project Atmosphere versions it was checked against and only with Deep Time
-  installed. Its jar stays a `compileOnly` input in the gitignored `libs/`.
+  installed. Its jar stays a `compileOnly` input in the gitignored `libs/`. Phase 9's hemisphere
+  seasons (Ben's "Patch PA per position", 2026-09-30) add three more mixins there under the same gate.
+- Serene Seasons (Glitchfiend) and Serene Seasons Plus (Gabou), both "All Rights Reserved": phase 9
+  (`plans/phase-09-hemisphere-seasons.md`, Ben's decisions of 2026-09-30) mixes into five Serene
+  Seasons classes and one Serene Seasons Plus class at runtime, in their own config, only for
+  versions they were checked against and only with Deep Time installed, and uses Serene Seasons'
+  resolver-override hook for colours. Nothing of either is copied or redistributed; the pinned jars
+  are `compileOnly` inputs in the gitignored `libs/`.
 - LSO all-rights-reserved: we compile against its `api`/`registry` classes (intended for
   integrations, and Project Atmosphere does the same). Do not ship any LSO code. Ask the author if
   publishing beyond the pack.

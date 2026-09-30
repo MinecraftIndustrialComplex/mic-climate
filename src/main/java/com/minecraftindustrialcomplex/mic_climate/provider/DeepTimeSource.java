@@ -25,11 +25,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>Loaded lazily from {@link UnifiedEnvironmentProvider} behind a
  * {@code Compat.isLoaded("deeptime")} guard, so without Deep Time the JVM never resolves these
  * imports. Server side only: Deep Time keeps its world data on the server, and on a client level
- * (or any level Deep Time did not generate) this answers {@code null}.
+ * (or any level Deep Time did not generate) this answers {@code null}. The exception is the
+ * planet's geometry ({@link #circumferenceBlocks}), which Deep Time's client knows too and which the
+ * hemisphere seasons ({@code seasons.PlanetLatitude}) read on both sides.
  */
 public final class DeepTimeSource {
 
     private static final AtomicBoolean LOGGED_FAILURE = new AtomicBoolean();
+    /** Set once Deep Time turned out to predate climate API 2 (no geometry): never ask again. */
+    private static volatile boolean noGeometryApi;
 
     private DeepTimeSource() {}
 
@@ -170,6 +174,28 @@ public final class DeepTimeSource {
                 Double.isNaN(yearFraction) ? "no season calendar: annual mean"
                         : String.format(Locale.ROOT, "year %.3f (month %d) from %s", yearFraction, r.month(), calendar),
                 r.meanC(), r.warmestC(), r.coldestC(), r.precipMm(), r.elevationM());
+    }
+
+    /**
+     * The circumference, in blocks, of the Deep Time planet {@code level} is, on either side (Deep
+     * Time's climate API 2: the generator's on the server, the planet info the server sent on a
+     * client), or 0: not a planet, no info yet, or a Deep Time older than API 2 (logged once, then
+     * never asked again). Allocation-free; colour resolvers call it from mesh threads.
+     */
+    public static int circumferenceBlocks(Level level) {
+        if (noGeometryApi)
+            return 0;
+        try {
+            return DeepTimeClimate.circumferenceBlocks(level);
+        } catch (LinkageError e) {
+            noGeometryApi = true;
+            MicClimate.LOGGER.warn("This Deep Time has no planet geometry (climate API 2); Serene Seasons' seasons "
+                    + "stay the same everywhere on its planets", e);
+            return 0;
+        } catch (Throwable t) {
+            logOnce(t);
+            return 0;
+        }
     }
 
     /** Deep Time's climate API version, for the log. */

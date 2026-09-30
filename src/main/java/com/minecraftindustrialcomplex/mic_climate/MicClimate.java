@@ -8,12 +8,14 @@ import com.minecraftindustrialcomplex.mic_climate.crowns.CrownsBridge;
 import com.minecraftindustrialcomplex.mic_climate.gametest.GameTests;
 import com.minecraftindustrialcomplex.mic_climate.lso.LsoBridge;
 import com.minecraftindustrialcomplex.mic_climate.provider.UnifiedEnvironmentProvider;
+import com.minecraftindustrialcomplex.mic_climate.seasons.client.SeasonsClient;
 import com.github.thedeathlycow.thermoo.api.ThermooRegistryKeys;
 import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.registries.RegisterEvent;
@@ -82,6 +84,13 @@ public class MicClimate {
         if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)
                 && (Compat.isLoaded(Compat.DEEP_TIME) || ClimateConfig.Test.ENABLED))
             ProjectAtmosphereBase.init();
+
+        // Serene Seasons' seasons by latitude on Deep Time planets (mixin.seasons, applied by
+        // SeasonsMixinPlugin under the same conditions). The client half is the colour override and
+        // its re-mesh trigger; the server half needs no registration.
+        if (FMLEnvironment.dist.isClient() && Compat.isLoaded(Compat.SERENE_SEASONS)
+                && (Compat.isLoaded(Compat.DEEP_TIME) || ClimateConfig.Test.ENABLED))
+            SeasonsClient.init(modBus);
 
         // /mic_climate probe|invalidate|pollution|mode -- the console's view of
         // what every bridged mod thinks the temperature is. Registered on the

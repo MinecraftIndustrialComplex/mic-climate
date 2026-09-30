@@ -59,6 +59,8 @@ public final class ClimateConfig {
     private static ModConfigSpec.BooleanValue DEEP_TIME_WEATHER;
     private static ModConfigSpec.DoubleValue DEEP_TIME_MAX_ANOMALY;
     private static ModConfigSpec.BooleanValue DEEP_TIME_PA_BASE;
+    private static ModConfigSpec.BooleanValue DEEP_TIME_HEMISPHERE_SEASONS;
+    private static ModConfigSpec.DoubleValue DEEP_TIME_FULL_SEASON_LATITUDE;
     private static ModConfigSpec.BooleanValue POWERGRID_ENABLED;
     private static ModConfigSpec.BooleanValue DESTROY_ENABLED;
     private static ModConfigSpec.BooleanValue LSO_ENABLED;
@@ -185,6 +187,28 @@ public final class ClimateConfig {
                     "line otherwise. Needs deepTime.enabled. Worlds Deep Time did not generate are not affected."
             );
             DEEP_TIME_PA_BASE = builder.define("projectAtmosphereBase", true);
+
+            builder.comment(
+                    "Serene Seasons' seasons by latitude on a Deep Time planet (latitude = -z * 360 / circumference).",
+                    "Serene Seasons has one season per world, the northern one. With this on, south of the equator",
+                    "its calendar runs half a year out, and the seasons fade smoothly toward the equator, where",
+                    "there are none (Mid Summer, Serene Seasons' neutral season, all year). It covers Serene",
+                    "Seasons' grass, foliage and birch colours, its biome temperature (snow, ice, rain or snow), crop",
+                    "fertility, melting and the season sensor; Serene Seasons Plus's snow policy; and Project",
+                    "Atmosphere's regional season (humidity, pressure, cloud water, sunlight) and falling leaves.",
+                    "Serene Seasons' own season, events and weather frequency stay the world's. This mixes into those",
+                    "mods (they have no per-position season API); each mixin is only applied to versions it was",
+                    "checked against. Needs deepTime.enabled. Worlds Deep Time did not generate are not affected.",
+                    "Clients read their own copy of this file for the colours, so keep it the same on both sides."
+            );
+            DEEP_TIME_HEMISPHERE_SEASONS = builder.define("hemisphereSeasons", true);
+
+            builder.comment(
+                    "The latitude, in degrees, at and beyond which the seasons have their full strength. Toward the",
+                    "equator they fade smoothly (a smoothstep: half strength at half this latitude) to none at the",
+                    "equator. Keep it the same on the server and on clients."
+            );
+            DEEP_TIME_FULL_SEASON_LATITUDE = builder.defineInRange("fullSeasonLatitude", 45.0, 1.0, 90.0);
             builder.pop();
 
             builder.comment(
@@ -344,8 +368,20 @@ public final class ClimateConfig {
         private static volatile Boolean deepTimeWeather;
         private static volatile Boolean projectAtmosphereBase;
         private static volatile Float projectAtmosphereTestClimate;
+        private static volatile Boolean hemisphereSeasons;
+        private static volatile TestPlanet seasonTestPlanet;
 
         private Test() {}
+
+        /**
+         * A stand-in Deep Time planet for the hemisphere seasons: every server level of the overworld
+         * counts as a planet of this circumference, with its equator at block {@code equatorZ}.
+         *
+         * @param circumference C in blocks; latitude is {@code -(z - equatorZ) * 360 / C}
+         * @param equatorZ      the z of the equator (0 on a real planet); a test moves it to put its
+         *                      own blocks in the north, on the equator or in the south
+         */
+        public record TestPlanet(int circumference, int equatorZ) {}
 
         /**
          * Pins the unified ambient to a fixed value, bypassing the provider.
@@ -445,6 +481,25 @@ public final class ClimateConfig {
             return ENABLED ? projectAtmosphereTestClimate : null;
         }
 
+        public static void hemisphereSeasons(Boolean value) {
+            check();
+            hemisphereSeasons = value;
+        }
+
+        /**
+         * Treat the overworld as a Deep Time planet of circumference {@code circumference} with its
+         * equator at {@code equatorZ} (see {@link TestPlanet}); {@code null} for no stand-in.
+         */
+        public static void seasonTestPlanet(TestPlanet planet) {
+            check();
+            seasonTestPlanet = planet;
+        }
+
+        /** @return the stand-in planet, or {@code null} for Deep Time's own */
+        public static TestPlanet seasonTestPlanet() {
+            return ENABLED ? seasonTestPlanet : null;
+        }
+
         /** Hands every setting back to the config file. Call from a test's finally. */
         public static void clear() {
             check();
@@ -462,6 +517,8 @@ public final class ClimateConfig {
             deepTimeWeather = null;
             projectAtmosphereBase = null;
             projectAtmosphereTestClimate = null;
+            hemisphereSeasons = null;
+            seasonTestPlanet = null;
         }
 
         private static void check() {
@@ -577,6 +634,40 @@ public final class ClimateConfig {
         if (projectAtmosphereBaseOverride != null)
             return projectAtmosphereBaseOverride;
         return !loaded() || DEEP_TIME_PA_BASE.get();
+    }
+
+    /**
+     * A {@code deepTime.hemisphereSeasons} set by {@code /mic_climate seasons} for this session, or
+     * {@code null} to use the file's value. Reachable in a normal game on purpose: comparing Serene
+     * Seasons' own season with the latitude's, in one running world, is what the switch is for.
+     */
+    private static volatile Boolean hemisphereSeasonsOverride;
+
+    /** @param value on/off for this session, or {@code null} to follow the config file again */
+    public static void hemisphereSeasonsOverride(Boolean value) {
+        hemisphereSeasonsOverride = value;
+    }
+
+    /** @return the session override, or {@code null} when the file is in charge */
+    public static Boolean hemisphereSeasonsOverride() {
+        return hemisphereSeasonsOverride;
+    }
+
+    /**
+     * {@code deepTime.hemisphereSeasons}: Serene Seasons' seasons by latitude on Deep Time planets.
+     * Also needs {@link #deepTimeEnabled()}.
+     */
+    public static boolean hemisphereSeasons() {
+        if (Test.hemisphereSeasons != null)
+            return Test.hemisphereSeasons;
+        if (hemisphereSeasonsOverride != null)
+            return hemisphereSeasonsOverride;
+        return !loaded() || DEEP_TIME_HEMISPHERE_SEASONS.get();
+    }
+
+    /** {@code deepTime.fullSeasonLatitude}, degrees. */
+    public static double fullSeasonLatitude() {
+        return loaded() ? DEEP_TIME_FULL_SEASON_LATITUDE.get() : 45.0;
     }
 
     /** {@code deepTime.maxAnomaly}, degrees Celsius. */
