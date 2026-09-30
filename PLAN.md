@@ -501,3 +501,32 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
   - Finding, not this phase's: at `terralith:deep_warm_ocean` (which Deep Time places) the unified provider does not
     answer and Thermoo returns its default 20.00 °C (the Af coordinate on the first pass), most likely because that
     biome is not in `#minecraft:is_overworld`, the tag `thermoo/environment/overworld.json` selects.
+- **2026-09-30 phase 9 (seasons by latitude on Deep Time planets) built on branch `seasons`** — Ben's decisions
+  (Deep Time decisions log, 2026-09-30): code in mic-climate, "full latitude damping", Project Atmosphere patched
+  per position, Serene Seasons Plus snow patched. Design, hooks, gating and limits:
+  `plans/phase-09-hemisphere-seasons.md`. Needs Deep Time's climate API 2 (branch `climate-latitude-api`, not
+  merged: `DeepTimeClimate.circumferenceBlocks(Level)` on both sides, `latitudeDeg`).
+  - **GameTests** (Mac, `tools/remote/mic-climate.sh`): `./gametest.sh` 28/28 (7 skip: no Project Atmosphere or
+    Serene Seasons Plus, 2 client-only) and `-PwithAtmosphere` 28/28. Serene Seasons is now the pack's own pin
+    (10.1.0.3 from CurseForge, `libs/`) at compile and test time; the mixins bind 4/4 (Serene Seasons, server),
+    1/1 (Serene Seasons Plus), 2/2 (Project Atmosphere, server).
+  - **Real Deep Time planet** (MIC server, earthlike_quick_16k, scattered continents, 500 Myr, C = 16384; Deep Time
+    `climate-latitude-api`; Deep Time's `tools/review/seasons-probe.sh`): a grid of 32 places at 45 N, 15 N, the
+    equator and 45 S; most are sea, the land ones are below. The Mixin export shows every server injector landed
+    in its target (`review/out/seasons/injections.txt` in Deep Time). Northern midwinter / northern midsummer:
+
+    | Site | Lat., strength | Serene Seasons here (decisions) | SS temperature (level's) | Snow/ice (< 0.15) | Wheat | Melt | PA region season, sunlight | PA snow/freeze °C |
+    |---|---|---|---|---|---|---|---|---|
+    | Dfb, `terralith:yellowstone` (−3072, −2048) | 45.0 N, 1.00 | Mid Winter / Mid Summer | −0.50 (−0.50) / 0.25 (0.25) | yes / no | no / yes | 0 / 25 % | winter ×0.73 / summer ×1.08 | −9.6 / 16.1 |
+    | Cfa, `terralith:birch_taiga` (−7168, −683) | 15.0 N, 0.26 | Late Spring / Mid Summer | 0.03 (−0.50) / 0.22 (0.22) | yes¹ / no | no / yes | 12.5 / 25 % | spring ×0.95 / summer ×1.08 | 18.3 / 25.0 |
+    | Af, `bamboo_jungle` (−7168, 0) | 0.0, 0.00 | Mid Summer / Mid Summer | 0.95 (0.95)² / 0.95 | no / no | yes / yes | 25 / 25 % | summer ×1.08 / summer ×1.08 | 25.2 / 25.2 |
+    | sea, `terralith:deep_warm_ocean` (−5120, 0) | 0.0, 0.00 | Mid Summer / Mid Summer | 0.50 (−0.30) / 0.50 (0.50) | no / no | yes / yes | 25 / 25 % | summer / summer | 26.3 / 26.6 |
+    | Cfb, `old_growth_birch_forest` (−3072, 2048) | 45.0 S, 1.00 | Mid Summer / Mid Winter | 0.60 (−0.20) / −0.20 (0.60) | no / yes | yes / no | 25 / 0 % | summer ×1.08 / winter ×0.73 | 16.1 / 3.0 |
+    | same, `/mic_climate seasons off`, midwinter | — | Mid Winter | −0.20 | yes | no | 0 % | winter ×0.73 | 16.1 |
+
+    ¹ Terralith's birch taiga is a cold biome to Serene Seasons (0.22 even in its summer), so it stays under 0.15 at
+    15° in winter though faded from −0.50 to 0.03; the biome, not the season. ² Serene Seasons' tropical biomes take
+    no temperature shift. The equator is seasonless (Mid Summer all year, wheat all year, no winter cooling in either
+    season); the south is inverted in every column; at 15 N the season is faded (Late Spring in midwinter). Project
+    Atmosphere's level-wide season stayed winter / summer throughout. Its snow/freeze temperature is Deep Time's
+    (phase 8), which already had each hemisphere's season.
