@@ -21,30 +21,31 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The gate in front of {@code mic_climate.projectatmosphere.mixins.json}: the optional hook that
- * gives Project Atmosphere Deep Time's climate as its base temperature.
+ * The gate in front of {@code mic_climate.projectatmosphere.mixins.json}: the optional hooks into
+ * Project Atmosphere (Deep Time's climate as its base, Destroy's pollution inside its temperature,
+ * and the per-player Deep Time client table with the rain or snow it decides).
  *
  * <p>Project Atmosphere's jar says "All Rights Reserved" and has no API for its base temperature,
- * so the hook mixes into its internals (Ben's call, 2026-09-30: "Mixin anyway"). Internals change
- * without notice, so each mixin is applied only when every one of these holds, and otherwise is
- * skipped with one log line and Project Atmosphere runs untouched:
+ * so the hooks mix into its internals (Ben's calls, 2026-09-30: "Mixin anyway"; pollution "in all
+ * worlds"). Internals change without notice, so each mixin is applied only when every one of these
+ * holds, and otherwise is skipped with one log line and Project Atmosphere runs untouched:
  *
  * <ol>
  *   <li>Project Atmosphere is installed, at a version inside
  *       {@link ProjectAtmosphereVersions#KNOWN_RANGE} (or
  *       {@code -Dmic_climate.projectAtmosphereBase.anyVersion=true});</li>
- *   <li>Deep Time is installed (the only source of a better base today), or this JVM is a GameTest
- *       run, which exercises the hook with a synthetic climate;</li>
+ *   <li>a mod the mixin serves is installed: Deep Time (the base, the client table) or Destroy (the
+ *       pollution part, which shares the temperature hooks), or this JVM is a GameTest run;</li>
+ *   <li>the mod whose class it targets is installed (Serene Seasons for the rain-or-snow mixin);</li>
  *   <li>{@code -Dmic_climate.projectAtmosphereBase=false} is not set;</li>
- *   <li>every method the mixin injects into, and every call it wraps, is present in Project
- *       Atmosphere's bytecode with the expected descriptor.</li>
+ *   <li>every method the mixin injects into, and every call it wraps, is present in that mod's
+ *       bytecode with the expected descriptor.</li>
  * </ol>
  *
  * <p>Behind this the config itself is {@code "required": false} with {@code defaultRequire: 0},
- * every mixin is {@code @Pseudo}, and the runtime side ({@code atmosphere.ProjectAtmosphereBase})
- * falls back to Project Atmosphere's own number on any exception. Whether it is active in a given
- * world is decided at runtime: only in a Deep Time world, and only with
- * {@code deepTime.projectAtmosphereBase} on.
+ * every mixin is {@code @Pseudo}, and the runtime side ({@code atmosphere.ProjectAtmosphereBase},
+ * {@code atmosphere.ProjectAtmosphereClientCache}) falls back to the original value on any
+ * exception. Which part is active in a given world is decided at runtime.
  *
  * <p>Like {@code mixin.MicClimateMixinPlugin}, this runs during mixin preparation and touches none
  * of the mod's other classes (the constants it reads are inlined by {@code javac}). It lives outside
@@ -57,6 +58,11 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
 
     private static final String PA_MOD = "projectatmosphere";
     private static final String DEEP_TIME_MOD = "deeptime";
+    private static final String DESTROY_MOD = "destroy";
+    private static final String SERENE_SEASONS_MOD = "sereneseasons";
+    /** Mixins that serve Deep Time only, and the ones that serve Deep Time or Destroy. */
+    private static final List<String> FOR_DEEP_TIME = List.of(DEEP_TIME_MOD);
+    private static final List<String> FOR_DEEP_TIME_OR_DESTROY = List.of(DEEP_TIME_MOD, DESTROY_MOD);
     private static final String MIXIN_PACKAGE = "com.minecraftindustrialcomplex.mic_climate.mixin.projectatmosphere.";
 
     private static final String PA = "net/Gabou/projectatmosphere/";
@@ -70,8 +76,11 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
     /** A call that must appear inside a target method. */
     private record Call(Method in, String owner, String name, String desc) {}
 
-    /** What one mixin needs from its target class. */
-    private record Needs(List<Method> methods, List<Call> calls) {}
+    /**
+     * What one mixin needs: the mod whose jar holds its target, the mods it serves (any one of
+     * them), and the methods and calls it hooks.
+     */
+    private record Needs(String jarMod, List<String> serves, List<Method> methods, List<Call> calls) {}
 
     private static final Method GET_TARGET = new Method("getTargetTemperature", "(J)F");
     private static final Method GET_EFFECTIVE_BASE = new Method("getEffectiveBaseTemperature", "()F");
@@ -79,9 +88,13 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
     private static final Method GET_BASELINE_MAX = new Method("getBaselineMaxTemperature", "()F");
     private static final String DRIFT = PA + "modules/atmosphere/SeasonalAtmosphericDrift";
     private static final Method CROP_EVALUATE = new Method("evaluate", "(" + SERVER_LEVEL + BLOCK_POS + ")Ljava/util/EnumSet;");
+    private static final Method SEND_TO_PLAYER = new Method("sendDailyForecastsToPlayer",
+            "(Lnet/minecraft/server/level/ServerPlayer;Ljava/util/Map;)V");
+    private static final Method COMPUTE_AVERAGES = new Method("computeAverageForecastsByBiomeType", "()V");
+    private static final String PAYLOAD = "Lnet/minecraft/network/protocol/common/custom/CustomPacketPayload;";
 
     private static final Map<String, Needs> NEEDS = Map.of(
-            "RegionAtmosphereStateMixin", new Needs(
+            "RegionAtmosphereStateMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(GET_TARGET, GET_EFFECTIVE_BASE, GET_BASELINE_MIN, GET_BASELINE_MAX,
                             new Method("getBaseTemperature", "()F"),
                             new Method("getTemperature", "()F"),
@@ -90,28 +103,35 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
                             new Call(GET_EFFECTIVE_BASE, DRIFT, "currentTemperatureOffsetC", "()F"),
                             new Call(GET_BASELINE_MIN, DRIFT, "currentTemperatureOffsetC", "()F"),
                             new Call(GET_BASELINE_MAX, DRIFT, "currentTemperatureOffsetC", "()F"))),
-            "AtmoApiMixin", new Needs(
+            "AtmoApiMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(new Method("getWeatherSnapshot",
                             "(" + SERVER_LEVEL + BLOCK_POS + "J)L" + PA + "api/WeatherSnapshot;")),
                     List.of()),
-            "ForecastOrchestratorMixin", new Needs(
+            "ForecastOrchestratorMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(new Method("getCurrentTemperature", "(" + SERVER_LEVEL + BLOCK_POS + "J)F")),
                     List.of()),
-            "LocalBiomeTemperatureResolverMixin", new Needs(
+            "LocalBiomeTemperatureResolverMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(new Method("getLocalBiomeTemperature",
                             "(" + SERVER_LEVEL + BLOCK_POS + REGION_KEY + "L" + PA + "modules/region/ForecastRegion;)D")),
                     List.of()),
-            "CropStressManagerMixin", new Needs(
+            "CropStressManagerMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(CROP_EVALUATE),
                     List.of(new Call(CROP_EVALUATE, PA + "manager/ForecastOrchestrator", "getCurrentTemperature",
-                            "(" + REGION_KEY + "J)F")))
+                            "(" + REGION_KEY + "J)F"))),
+            "ForecastGeneratorMixin", new Needs(PA_MOD, FOR_DEEP_TIME,
+                    List.of(SEND_TO_PLAYER, COMPUTE_AVERAGES),
+                    List.of(new Call(COMPUTE_AVERAGES, "net/neoforged/neoforge/network/PacketDistributor", "sendToAllPlayers",
+                            "(" + PAYLOAD + "[" + PAYLOAD + ")V"))),
+            "SeasonHooksPrecipitationMixin", new Needs(SERENE_SEASONS_MOD, FOR_DEEP_TIME,
+                    List.of(new Method("getPrecipitationAtSeasonal",
+                            "(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/Holder;" + BLOCK_POS
+                                    + ")Lnet/minecraft/world/level/biome/Biome$Precipitation;")),
+                    List.of())
     );
 
     /** Why the whole config is off, or null when the per-mixin checks decide. Computed once. */
     private String disabledReason;
     private String paVersion = "?";
-    /** Project Atmosphere's mod file, whose class files the per-mixin checks read. */
-    private ModFileInfo paFile;
 
     @Override
     public void onLoad(String mixinPackage) {
@@ -121,11 +141,11 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
             disabledReason = "the pre-check itself failed (" + t + ")";
         }
         if (disabledReason == null) {
-            LOGGER.info("Project Atmosphere {} is inside the range the Deep Time base hook was checked against ({}); "
-                    + "checking its targets", paVersion, ProjectAtmosphereVersions.KNOWN_RANGE);
+            LOGGER.info("Project Atmosphere {} is inside the range its hooks were checked against ({}); "
+                    + "checking their targets", paVersion, ProjectAtmosphereVersions.KNOWN_RANGE);
         } else {
-            LOGGER.info("Deep Time base hook for Project Atmosphere not applied: {}. Project Atmosphere keeps "
-                    + "its own base temperature.", disabledReason);
+            LOGGER.info("Project Atmosphere hooks (Deep Time base, Destroy pollution) not applied: {}. Project "
+                    + "Atmosphere keeps its own temperature.", disabledReason);
         }
     }
 
@@ -138,10 +158,9 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
         ModFileInfo pa = mods.getModFileById(PA_MOD);
         if (pa == null)
             return "Project Atmosphere is not installed";
-        paFile = pa;
         boolean gametest = Boolean.getBoolean("mic_climate.gametest");
-        if (mods.getModFileById(DEEP_TIME_MOD) == null && !gametest)
-            return "Deep Time is not installed, and nothing else offers a better base";
+        if (mods.getModFileById(DEEP_TIME_MOD) == null && mods.getModFileById(DESTROY_MOD) == null && !gametest)
+            return "neither Deep Time nor Destroy is installed, so there is nothing to add to it";
         ArtifactVersion version = pa.getMods().stream()
                 .filter(m -> PA_MOD.equals(m.getModId()))
                 .findFirst()
@@ -179,15 +198,26 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
             LOGGER.warn("Skipping {}: the plugin has no target checks for it", mixinClassName);
             return false;
         }
+        LoadingModList mods = LoadingModList.get();
+        boolean gametest = Boolean.getBoolean("mic_climate.gametest");
+        if (!gametest && needs.serves().stream().noneMatch(mod -> mods.getModFileById(mod) != null)) {
+            LOGGER.info("Skipping {}: none of {} is installed", simple, needs.serves());
+            return false;
+        }
+        ModFileInfo jar = mods.getModFileById(needs.jarMod());
+        if (jar == null) {
+            LOGGER.info("Skipping {}: {} is not installed", simple, needs.jarMod());
+            return false;
+        }
         String missing;
         try {
-            missing = missing(paFile, targetClassName, needs);
+            missing = missing(jar, targetClassName, needs);
         } catch (Throwable t) {
             missing = "could not read " + targetClassName + " (" + t + ")";
         }
         if (missing != null) {
-            LOGGER.warn("Skipping {}: Project Atmosphere {}'s internals differ from the checked build ({}). "
-                    + "That part of Project Atmosphere keeps its own base temperature.", simple, paVersion, missing);
+            LOGGER.warn("Skipping {}: {}'s internals differ from the checked build ({}). That part keeps its own "
+                    + "behaviour.", simple, needs.jarMod(), missing);
             return false;
         }
         LOGGER.info("Applying {} to {} (Project Atmosphere {})", simple, targetClassName, paVersion);
@@ -197,12 +227,12 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
     /**
      * The first thing {@code needs} asks for that the target's bytecode lacks, or null.
      *
-     * <p>The class is read straight out of Project Atmosphere's jar, untransformed: ModLauncher's
+     * <p>The class is read straight out of the target mod's jar, untransformed: ModLauncher's
      * mixin service cannot hand out untransformed bytecode, and asking it for the transformed class
      * while mixins are still being prepared would load the target early.
      */
-    private static String missing(ModFileInfo pa, String targetClassName, Needs needs) throws Exception {
-        Path file = pa.getFile().findResource(targetClassName.replace('.', '/') + ".class");
+    private static String missing(ModFileInfo jar, String targetClassName, Needs needs) throws Exception {
+        Path file = jar.getFile().findResource(targetClassName.replace('.', '/') + ".class");
         if (file == null || !Files.exists(file))
             return "no class " + targetClassName;
         ClassNode node = new ClassNode();

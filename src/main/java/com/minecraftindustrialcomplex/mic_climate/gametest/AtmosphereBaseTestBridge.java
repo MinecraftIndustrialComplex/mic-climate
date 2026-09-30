@@ -1,6 +1,8 @@
 package com.minecraftindustrialcomplex.mic_climate.gametest;
 
 import com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereBase;
+import com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereClientCache;
+import com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereHooked;
 import net.Gabou.projectatmosphere.api.AtmoApi;
 import net.Gabou.projectatmosphere.api.CropStressType;
 import net.Gabou.projectatmosphere.manager.CropStressManager;
@@ -81,6 +83,11 @@ final class AtmosphereBaseTestBridge {
         float rawBandWidth() {
             return state.getBaselineTemperatureSpan();
         }
+
+        /** Writes the live temperature, standing in for Project Atmosphere's scheduler. */
+        void setLive(float celsius) {
+            state.setTemperature(celsius);
+        }
     }
 
     /** Project Atmosphere's own global season offset, which the hook replaces per region. */
@@ -98,5 +105,36 @@ final class AtmosphereBaseTestBridge {
 
     static float anomaly(ServerLevel level, BlockPos pos) {
         return ProjectAtmosphereBase.anomaly(level, pos);
+    }
+
+    static float pollutionShift(ServerLevel level) {
+        return ProjectAtmosphereBase.pollutionShift(level);
+    }
+
+    /** The two client-cache targets: Project Atmosphere's forecast sender and Serene Seasons' precipitation. */
+    static int boundClientTargets() {
+        int n = 0;
+        for (String name : new String[] {"net.Gabou.projectatmosphere.manager.ForecastGenerator", "sereneseasons.season.SeasonHooks"}) {
+            try {
+                if (ProjectAtmosphereHooked.class.isAssignableFrom(Class.forName(name)))
+                    n++;
+            } catch (ClassNotFoundException ignored) {
+                // Serene Seasons absent.
+            }
+        }
+        return n;
+    }
+
+    /** The client's rain-or-snow rule for a table value, and what the hook does on a server level. */
+    static String precipitationRule(ServerLevel level, BlockPos pos) {
+        var biome = level.getBiome(pos);
+        return ProjectAtmosphereClientCache.decide(-0.1f) + "," + ProjectAtmosphereClientCache.decide(0.1f) + ","
+                + ProjectAtmosphereClientCache.precipitation(level, biome, net.minecraft.world.level.biome.Biome.Precipitation.RAIN) + ","
+                + ProjectAtmosphereClientCache.precipitation(level, biome, net.minecraft.world.level.biome.Biome.Precipitation.NONE);
+    }
+
+    /** The per-player Deep Time table around {@code pos}. */
+    static java.util.Map<net.minecraft.resources.ResourceLocation, float[]> clientTable(ServerLevel level, BlockPos pos, int radius) {
+        return ProjectAtmosphereClientCache.local(level, pos, radius);
     }
 }

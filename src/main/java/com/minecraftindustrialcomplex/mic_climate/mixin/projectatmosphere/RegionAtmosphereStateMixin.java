@@ -32,8 +32,12 @@ import org.spongepowered.asm.mixin.injection.At;
  * The {@code private final} base itself is never written, so a region Project Atmosphere never
  * simulated still reads exactly its base and can still be recognised as such.
  *
- * <p>Outside a Deep Time world, with {@code deepTime.projectAtmosphereBase} off, or on any error,
- * the handler returns Project Atmosphere's own offset: the call is unchanged.
+ * <p>In every world, with Destroy installed and {@code pollution.projectAtmosphere} on, Destroy's
+ * greenhouse warming is added to the offset too, so the region's targets, band and base carry the
+ * warming and Project Atmosphere relaxes toward it instead of eroding it.
+ *
+ * <p>With neither part on, or on any error, the handler returns Project Atmosphere's own offset:
+ * the call is unchanged.
  */
 @Pseudo
 @Mixin(targets = "net.Gabou.projectatmosphere.modules.atmosphere.RegionAtmosphereState", remap = false)

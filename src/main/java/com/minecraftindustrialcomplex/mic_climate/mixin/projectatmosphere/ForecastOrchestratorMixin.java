@@ -18,7 +18,8 @@ import org.spongepowered.asm.mixin.injection.At;
  * (below 0 &deg;C precipitation falls as snow), and its thermometer, seasonal-tree vigour,
  * commands and public {@code ForecastSampling} read it too. In a Deep Time world the answer
  * becomes Deep Time's monthly mean at the block plus the region's weather anomaly, per block and
- * with the local hemisphere's season. The original still runs first, so any region Project
+ * with the local hemisphere's season; in every world Destroy's pollution warming is added (the
+ * forecast it samples does not carry it). The original still runs first, so any region Project
  * Atmosphere loads on demand here is still loaded.
  */
 @Pseudo
@@ -31,6 +32,6 @@ public abstract class ForecastOrchestratorMixin implements ProjectAtmosphereHook
             require = 0
     )
     private static float micc$deepTimeTemperature(float original, ServerLevel level, BlockPos pos, long tick) {
-        return ProjectAtmosphereBase.celsius(level, pos, original);
+        return ProjectAtmosphereBase.celsius(level, pos, original, ProjectAtmosphereBase.Reading.FORECAST);
     }
 }

@@ -132,6 +132,25 @@ public final class ProjectAtmosphereSource {
         }
     }
 
+    /**
+     * Whether {@link #celsius}'s reading at {@code pos}, taken next, will already carry Destroy's
+     * warming; the unified provider then does not add it again. On the server that is when the
+     * pollution part of {@code atmosphere.ProjectAtmosphereBase} is on and either the region has
+     * simulated (its live temperature has settled on a base that includes the warming) or there is no
+     * region yet (Project Atmosphere then answers from its forecast, to which the hook adds it). On a
+     * client, when the cache holds the per-player Deep Time values, which include it.
+     */
+    public static boolean readingCarriesPollution(Level level, BlockPos pos) {
+        try {
+            if (level instanceof ServerLevel server)
+                return com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereBase.liveReadingCarriesPollution(server, pos);
+            return level != null && level.isClientSide()
+                    && com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereClientCache.deepTimeCacheReceived();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     /** The region's live and effective-base temperatures, for the probe; null without a live region. */
     @Nullable
     public static float[] regionTemperatures(ServerLevel level, BlockPos pos) {

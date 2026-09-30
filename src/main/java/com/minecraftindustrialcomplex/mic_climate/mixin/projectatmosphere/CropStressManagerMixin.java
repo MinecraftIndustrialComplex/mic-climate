@@ -32,6 +32,6 @@ public abstract class CropStressManagerMixin implements ProjectAtmosphereHooked 
             require = 0
     )
     private static float micc$deepTimeCropTemperature(float original, ServerLevel level, BlockPos pos) {
-        return ProjectAtmosphereBase.celsius(level, pos, original);
+        return ProjectAtmosphereBase.celsius(level, pos, original, ProjectAtmosphereBase.Reading.LIVE);
     }
 }

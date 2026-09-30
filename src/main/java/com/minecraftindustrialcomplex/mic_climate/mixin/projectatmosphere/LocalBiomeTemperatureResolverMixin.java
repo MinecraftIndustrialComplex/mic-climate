@@ -22,7 +22,8 @@ import org.spongepowered.asm.mixin.injection.At;
  * go through the same method. In a Deep Time world this answers Deep Time's monthly mean at the
  * block (Deep Time's own lapse rate at the block's height, the local season) plus the region's
  * weather anomaly, so ice and snow follow the planet: none in the tropics, year-round on the ice
- * cap, winter-only in between, on the right side of the equator.
+ * cap, winter-only in between, on the right side of the equator. In every world Destroy's pollution
+ * warming is added, so a polluted sky thaws what it would have frozen.
  */
 @Pseudo
 @Mixin(targets = "net.Gabou.projectatmosphere.modules.temperature.util.LocalBiomeTemperatureResolver", remap = false)
@@ -35,6 +36,6 @@ public abstract class LocalBiomeTemperatureResolverMixin implements ProjectAtmos
     )
     private static double micc$deepTimeLocalTemperature(double original, ServerLevel level, BlockPos pos,
                                                         RegionInstanceKey regionKey, ForecastRegion forecast) {
-        return ProjectAtmosphereBase.celsius(level, pos, original);
+        return ProjectAtmosphereBase.celsius(level, pos, original, ProjectAtmosphereBase.Reading.FORECAST);
     }
 }

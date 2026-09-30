@@ -33,9 +33,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *       ({@link BiomeSeasonFallback});</li>
  *   <li>plus Destroy's pollution warming, added exactly once, here at the
  *       source, so that no consumer downstream has to know pollution exists
- *       ({@link DestroyPollutionShift}) — unless {@code pollution.mode} is
- *       {@code ATMOSPHERE}, in which case it has already been pushed into
- *       Project Atmosphere and arrives through step 1.</li>
+ *       ({@link DestroyPollutionShift}) — unless step 1's live reading already
+ *       carries it (Project Atmosphere's own temperature includes the warming
+ *       through {@code pollution.projectAtmosphere} once its region has
+ *       simulated), so it is never counted twice.</li>
  * </ol>
  *
  * <p>Steps 1 and 3 touch optional mods, so each is reached only behind a
@@ -82,18 +83,26 @@ public final class UnifiedEnvironmentProvider implements EnvironmentProvider {
         if (ClimateConfig.deepTimeEnabled() && Compat.isLoaded(Compat.DEEP_TIME)) {
             DeepTimeTemperature dt = deepTime(world, pos, source);
             if (dt != null) {
+                // The weather anomaly is live minus seasonal base, and with pollution inside Project
+                // Atmosphere both carry the warming equally, so it is never in dt: add it once here.
                 float celsius = dt.celsius();
-                if (this.pollution && Compat.isLoaded(Compat.DESTROY)
-                        && (ClimateConfig.pollutionMode() != ClimateConfig.PollutionMode.ATMOSPHERE || !dt.withWeather()))
+                if (this.pollution && Compat.isLoaded(Compat.DESTROY)) {
+                    warnRetiredMode();
                     celsius += DestroyPollutionShift.shift(world);
+                }
                 builder.set(EnvironmentComponentTypes.TEMPERATURE, new TemperatureRecord(celsius, TemperatureUnit.CELSIUS));
                 return;
             }
         }
 
         Float celsius = null;
-        if (source != ClimateConfig.Source.THERMOO && Compat.isLoaded(Compat.PROJECT_ATMOSPHERE))
+        boolean carriesPollution = false;
+        if (source != ClimateConfig.Source.THERMOO && Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)) {
+            // Asked before the reading: which of Project Atmosphere's paths answers depends on whether
+            // the region exists yet, and reading it can create the region.
+            carriesPollution = ProjectAtmosphereSource.readingCarriesPollution(world, pos);
             celsius = ProjectAtmosphereSource.celsius(world, pos, biome);
+        }
 
         if (celsius == null && source == ClimateConfig.Source.PROJECT_ATMOSPHERE
                 && WARNED_NO_ATMOSPHERE.compareAndSet(false, true)) {
@@ -106,8 +115,11 @@ public final class UnifiedEnvironmentProvider implements EnvironmentProvider {
         if (celsius == null)
             celsius = BiomeSeasonFallback.celsius(world, pos, biome);
 
-        if (this.pollution && Compat.isLoaded(Compat.DESTROY) && pollutionShiftApplies())
-            celsius += DestroyPollutionShift.shift(world);
+        if (this.pollution && Compat.isLoaded(Compat.DESTROY)) {
+            warnRetiredMode();
+            if (!carriesPollution)
+                celsius += DestroyPollutionShift.shift(world);
+        }
 
         builder.set(
                 EnvironmentComponentTypes.TEMPERATURE,
@@ -161,33 +173,18 @@ public final class UnifiedEnvironmentProvider implements EnvironmentProvider {
     }
 
     /**
-     * Whether Destroy's warming is added here rather than somewhere else.
-     *
-     * <p>{@code pollution.mode = ATMOSPHERE} puts the shift into Project
-     * Atmosphere's own regional state instead
-     * ({@code atmosphere.PollutionAtmosphereEffect}), and step 1 above then
-     * reads it back out of Project Atmosphere like any other weather — so
-     * adding it here as well would count it twice.
-     *
-     * <p>With Project Atmosphere absent there is nothing to push into and
-     * nothing to read back, so the mode falls back to {@code MODIFIER} with one
-     * warning: silently dropping the pollution effect would be worse than
-     * applying it in the old place.
+     * {@code pollution.mode = ATMOSPHERE} was retired on 2026-09-30: it pushed the warming into
+     * Project Atmosphere's regional state through its public API, where Project Atmosphere eroded it.
+     * The key still loads and now means {@code MODIFIER}; Project Atmosphere gets the warming through
+     * {@code pollution.projectAtmosphere} instead. Says so once.
      */
-    private static boolean pollutionShiftApplies() {
-        if (ClimateConfig.pollutionMode() != ClimateConfig.PollutionMode.ATMOSPHERE)
-            return true;
-
-        if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE))
-            return false;
-
-        if (WARNED_ATMOSPHERE_MODE.compareAndSet(false, true)) {
+    private static void warnRetiredMode() {
+        if (ClimateConfig.pollutionMode() == ClimateConfig.PollutionMode.ATMOSPHERE
+                && WARNED_ATMOSPHERE_MODE.compareAndSet(false, true)) {
             MicClimate.LOGGER.warn(
-                    "mic_climate pollution.mode = ATMOSPHERE needs Project Atmosphere, which is not "
-                            + "installed; adding Destroy's pollution warming here instead, as MODIFIER would."
-            );
+                    "mic_climate pollution.mode = ATMOSPHERE is retired and now behaves as MODIFIER: Destroy's "
+                            + "warming reaches Project Atmosphere through pollution.projectAtmosphere instead.");
         }
-        return true;
     }
 
     @Override

@@ -19,8 +19,10 @@ import org.spongepowered.asm.mixin.injection.At;
  * getCurrentWeather}), what Project Atmosphere syncs to each player's HUD, and what its world
  * effects sample. In a Deep Time world this replaces that temperature with Deep Time's monthly
  * mean at the block (its height and the date) plus the region's departure from its own (Deep
- * Time) base, the same weather anomaly mic-climate adds, and recomputes the snapshot's
- * {@code isSnowing} from it. Everything else in the snapshot is Project Atmosphere's.
+ * Time) base, the same weather anomaly mic-climate adds, plus Destroy's pollution warming, and
+ * recomputes the snapshot's {@code isSnowing} from it. Everything else in the snapshot is Project
+ * Atmosphere's. In other worlds the live temperature it reports already carries the pollution
+ * warming once the region has simulated, so the snapshot is left alone.
  */
 @Pseudo
 @Mixin(targets = "net.Gabou.projectatmosphere.api.AtmoApi", remap = false)

@@ -1,6 +1,5 @@
 package com.minecraftindustrialcomplex.mic_climate;
 
-import com.minecraftindustrialcomplex.mic_climate.atmosphere.PollutionAtmosphereEffect;
 import com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereBase;
 import com.minecraftindustrialcomplex.mic_climate.command.ClimateCommands;
 import com.minecraftindustrialcomplex.mic_climate.config.ClimateConfig;
@@ -68,19 +67,14 @@ public class MicClimate {
         if (Compat.isLoaded(Compat.CROWNS))
             CrownsBridge.init();
 
-        // pollution.mode = ATMOSPHERE puts Destroy's greenhouse warming into
-        // Project Atmosphere's own regional state, so it needs both mods to be
-        // there at all. Registering is unconditional on the mode itself: the
-        // handler reads the config every tick, so the setting can be changed in
-        // a running game and the offset is taken back out again when it is.
-        if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE) && Compat.isLoaded(Compat.DESTROY))
-            PollutionAtmosphereEffect.init();
-
-        // Deep Time's climate as Project Atmosphere's own base (mixin.projectatmosphere, applied by
-        // ProjectAtmosphereMixinPlugin under the same two conditions). This publishes the season's
-        // date once a tick for the hook, which Project Atmosphere also calls from worker threads.
+        // The Project Atmosphere hooks (mixin.projectatmosphere, applied by
+        // ProjectAtmosphereMixinPlugin under the same conditions): Deep Time's climate as its base in
+        // Deep Time worlds, Destroy's warming inside its temperature in every world, and the
+        // per-player Deep Time client cache. This publishes the date and the pollution shift once a
+        // tick for them (Project Atmosphere also calls its region getters from worker threads) and
+        // keeps each player's client cache fresh.
         if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)
-                && (Compat.isLoaded(Compat.DEEP_TIME) || ClimateConfig.Test.ENABLED))
+                && (Compat.isLoaded(Compat.DEEP_TIME) || Compat.isLoaded(Compat.DESTROY) || ClimateConfig.Test.ENABLED))
             ProjectAtmosphereBase.init();
 
         // /mic_climate probe|invalidate|pollution|mode -- the console's view of

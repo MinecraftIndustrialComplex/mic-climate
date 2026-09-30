@@ -45,6 +45,12 @@ public final class DestroyGameTests {
      */
     @GameTest(template = GameTests.TEMPLATE, timeoutTicks = 400)
     public static void destroyLocalTemperatureFollowsClimate(GameTestHelper helper) {
+        if (GameTests.skipWithout(helper, Compat.DESTROY))
+            return;
+        runDestroyLocalTemperatureFollowsClimate(helper);
+    }
+
+    private static void runDestroyLocalTemperatureFollowsClimate(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pos = GameTests.centre(helper);
 
@@ -79,6 +85,12 @@ public final class DestroyGameTests {
      */
     @GameTest(template = GameTests.TEMPLATE, timeoutTicks = 900, batch = "mic_climate_pollution")
     public static void pollutionWarmsOnce(GameTestHelper helper) {
+        if (GameTests.skipWithout(helper, Compat.DESTROY))
+            return;
+        runPollutionWarmsOnce(helper);
+    }
+
+    private static void runPollutionWarmsOnce(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pos = GameTests.centre(helper);
 

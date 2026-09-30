@@ -50,6 +50,9 @@ public final class AtmosphereBaseGameTests {
         int bound = AtmosphereBaseTestBridge.boundTargets();
         GameTests.record("Project Atmosphere hook targets bound", bound + "/5");
         GameTests.assertTrue("all five Project Atmosphere hook mixins applied", bound == 5);
+        int client = AtmosphereBaseTestBridge.boundClientTargets();
+        GameTests.record("client-table targets bound", client + "/2");
+        GameTests.assertTrue("both client-table mixins applied", client == 2);
         helper.succeed();
     }
 
@@ -73,6 +76,8 @@ public final class AtmosphereBaseGameTests {
         try {
             ClimateConfig.Test.deepTimeEnabled(true);
             ClimateConfig.Test.projectAtmosphereBase(true);
+            // The pollution part is on in every world; this is about the Deep Time part alone.
+            ClimateConfig.Test.pollutionProjectAtmosphere(false);
             GameTests.assertTrue("the hook is inactive in a world Deep Time did not generate",
                     !AtmosphereBaseTestBridge.active(level));
             assertProjectAtmosphereOwn(level, pos, "switch on, no Deep Time world");
@@ -112,6 +117,7 @@ public final class AtmosphereBaseGameTests {
         try {
             ClimateConfig.Test.deepTimeEnabled(true);
             ClimateConfig.Test.projectAtmosphereBase(true);
+            ClimateConfig.Test.pollutionProjectAtmosphere(false);
             for (float climate : new float[] {-30f, 40f}) {
                 ClimateConfig.Test.projectAtmosphereTestClimate(climate);
                 String at = String.format(java.util.Locale.ROOT, "stand-in %.0f C", climate);
@@ -151,6 +157,14 @@ public final class AtmosphereBaseGameTests {
                         region.target(dayTime) - region.effectiveBase(),
                         region.baseTarget(dayTime) - region.base(), 1e-3);
                 GameTests.assertNear(at + ": the day/night band is kept", region.bandWidth(), region.rawBandWidth(), 1e-3);
+
+                // The per-player client table: the biome here reads the stand-in (plus the weather anomaly).
+                var table = AtmosphereBaseTestBridge.clientTable(level, air, 32);
+                var here = level.getBiome(air).unwrapKey().orElseThrow().location();
+                GameTests.record(at + ": client table", table.size() + " biome(s), " + here + " = "
+                        + (table.containsKey(here) ? table.get(here)[0] : "missing"));
+                GameTests.assertTrue(at + ": the client table has the biome here", table.containsKey(here));
+                GameTests.assertNear(at + ": its value is the stand-in", table.get(here)[0], expected, 0.5);
             }
 
             ClimateConfig.Test.projectAtmosphereBase(false);
@@ -161,6 +175,20 @@ public final class AtmosphereBaseGameTests {
             ClimateConfig.Test.clear();
         }
         assertProjectAtmosphereOwn(level, pos, "overrides cleared");
+        helper.succeed();
+    }
+
+    /**
+     * The client's rain-or-snow rule: snow below 0 C of the table value, rain above; and on a server
+     * level (and for a biome that does not precipitate) Serene Seasons' answer is left alone.
+     */
+    @GameTest(template = GameTests.TEMPLATE, timeoutTicks = 100)
+    public static void clientPrecipitationRule(GameTestHelper helper) {
+        if (GameTests.skipWithout(helper, Compat.PROJECT_ATMOSPHERE))
+            return;
+        String rule = AtmosphereBaseTestBridge.precipitationRule(helper.getLevel(), GameTests.centre(helper));
+        GameTests.record("decide(-0.1), decide(0.1), server RAIN, server NONE", rule);
+        GameTests.assertTrue("snow below 0, rain above; the server's answer untouched", rule.equals("SNOW,RAIN,RAIN,NONE"));
         helper.succeed();
     }
 

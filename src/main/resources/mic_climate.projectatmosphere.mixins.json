@@ -9,7 +9,9 @@
     "AtmoApiMixin",
     "ForecastOrchestratorMixin",
     "LocalBiomeTemperatureResolverMixin",
-    "CropStressManagerMixin"
+    "CropStressManagerMixin",
+    "ForecastGeneratorMixin",
+    "SeasonHooksPrecipitationMixin"
   ],
   "injectors": {
     "defaultRequire": 0
