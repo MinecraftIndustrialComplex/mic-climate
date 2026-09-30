@@ -5,6 +5,13 @@ license     = "${mod_license}"
 [[mixins]]
 config = "mic_climate.mixins.json"
 
+# Optional: Deep Time's climate as Project Atmosphere's own base temperature. Kept in its own
+# config because it mixes into another mod's internals: "required": false, defaultRequire 0, and
+# a plugin (ProjectAtmosphereMixinPlugin) that applies it only to Project Atmosphere versions it was
+# checked against, only with Deep Time installed, and only when every target method is present.
+[[mixins]]
+config = "mic_climate.projectatmosphere.mixins.json"
+
 [[mods]]
 modId       = "${mod_id}"
 version     = "${mod_version}"

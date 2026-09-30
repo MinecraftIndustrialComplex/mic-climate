@@ -39,6 +39,7 @@ import java.util.Locale;
  * /mic_climate invalidate         drop the per-chunk cache, so the next read is real
  * /mic_climate pollution &lt;0..1&gt;   set Destroy's greenhouse to a fraction of its maximum
  * /mic_climate mode [modifier|atmosphere|config]   read or set pollution.mode for this session
+ * /mic_climate atmosphere base [on|off|config]     read or set deepTime.projectAtmosphereBase for this session
  * </pre>
  *
  * <p>Permission level 2 throughout: these read another mod's internals and two
@@ -88,18 +89,31 @@ public final class ClimateCommands {
         mode.then(Commands.literal("config").executes(ctx -> setMode(ctx, null)));
         root.then(mode);
 
-        // Headless test servers only (-Dmic_climate.driveAtmosphere=true): run Project
-        // Atmosphere's regional simulation without a player online (see AtmosphereDriver).
-        if (Boolean.getBoolean("mic_climate.driveAtmosphere") && Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)) {
-            root.then(Commands.literal("atmosphere").then(Commands.literal("drive")
-                    .then(Commands.argument("ticks", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 72000))
-                            .executes(ctx -> {
-                                int ticks = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "ticks");
-                                AtmosphereDriver.drive(ctx.getSource().getServer().overworld(), ticks);
-                                ctx.getSource().sendSuccess(() -> Component.literal(
-                                        "mic_climate: driving Project Atmosphere's overworld simulation for " + ticks + " ticks"), true);
-                                return 1;
-                            }))));
+        if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)) {
+            LiteralArgumentBuilder<CommandSourceStack> atmosphere = Commands.literal("atmosphere");
+
+            // Headless test servers only (-Dmic_climate.driveAtmosphere=true): run Project
+            // Atmosphere's regional simulation without a player online (see AtmosphereDriver).
+            if (Boolean.getBoolean("mic_climate.driveAtmosphere")) {
+                atmosphere.then(Commands.literal("drive")
+                        .then(Commands.argument("ticks", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 72000))
+                                .executes(ctx -> {
+                                    int ticks = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "ticks");
+                                    AtmosphereDriver.drive(ctx.getSource().getServer().overworld(), ticks);
+                                    ctx.getSource().sendSuccess(() -> Component.literal(
+                                            "mic_climate: driving Project Atmosphere's overworld simulation for " + ticks + " ticks"), true);
+                                    return 1;
+                                })));
+            }
+
+            // deepTime.projectAtmosphereBase for this session: compare Project Atmosphere's own
+            // numbers with and without the Deep Time base hook in one running world.
+            atmosphere.then(Commands.literal("base")
+                    .executes(ClimateCommands::reportAtmosphereBase)
+                    .then(Commands.literal("on").executes(ctx -> setAtmosphereBase(ctx, true)))
+                    .then(Commands.literal("off").executes(ctx -> setAtmosphereBase(ctx, false)))
+                    .then(Commands.literal("config").executes(ctx -> setAtmosphereBase(ctx, null))));
+            root.then(atmosphere);
         }
 
         dispatcher.register(root);
@@ -148,8 +162,10 @@ public final class ClimateCommands {
         if (Compat.isLoaded(Compat.CROWNS))
             lines.add(CrownsProbe.probeLine(level, pos));
 
-        if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE))
+        if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)) {
             lines.add(AtmosphereProbe.probeLine(level, pos));
+            lines.add(AtmosphereProbe.baseLine(level, pos));
+        }
 
         if (Compat.isLoaded(Compat.DEEP_TIME))
             lines.addAll(DeepTimeProbe.probeLines(level, pos));
@@ -247,6 +263,29 @@ public final class ClimateCommands {
                 "mic_climate: pollution.mode = %s (%s)",
                 ClimateConfig.pollutionMode(),
                 mode == null ? "session override cleared" : "session override")), true);
+        return 1;
+    }
+
+    private static int reportAtmosphereBase(CommandContext<CommandSourceStack> ctx) {
+        Boolean override = ClimateConfig.projectAtmosphereBaseOverride();
+        ctx.getSource().sendSuccess(() -> Component.literal(String.format(
+                Locale.ROOT,
+                "mic_climate: deepTime.projectAtmosphereBase = %s (%s)",
+                ClimateConfig.projectAtmosphereBase(),
+                override == null ? "from mic_climate-common.toml" : "session override")), false);
+        return 1;
+    }
+
+    private static int setAtmosphereBase(CommandContext<CommandSourceStack> ctx, Boolean value) {
+        ClimateConfig.projectAtmosphereBaseOverride(value);
+        // Project Atmosphere's per-block answers feed the unified value's Project Atmosphere source
+        // outside the Deep Time path, so drop what the chunks are holding.
+        Climate.invalidate(null);
+        ctx.getSource().sendSuccess(() -> Component.literal(String.format(
+                Locale.ROOT,
+                "mic_climate: deepTime.projectAtmosphereBase = %s (%s)",
+                ClimateConfig.projectAtmosphereBase(),
+                value == null ? "session override cleared" : "session override")), true);
         return 1;
     }
 

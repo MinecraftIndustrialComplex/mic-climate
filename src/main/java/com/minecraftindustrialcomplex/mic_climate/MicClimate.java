@@ -1,6 +1,7 @@
 package com.minecraftindustrialcomplex.mic_climate;
 
 import com.minecraftindustrialcomplex.mic_climate.atmosphere.PollutionAtmosphereEffect;
+import com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereBase;
 import com.minecraftindustrialcomplex.mic_climate.command.ClimateCommands;
 import com.minecraftindustrialcomplex.mic_climate.config.ClimateConfig;
 import com.minecraftindustrialcomplex.mic_climate.crowns.CrownsBridge;
@@ -74,6 +75,13 @@ public class MicClimate {
         // a running game and the offset is taken back out again when it is.
         if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE) && Compat.isLoaded(Compat.DESTROY))
             PollutionAtmosphereEffect.init();
+
+        // Deep Time's climate as Project Atmosphere's own base (mixin.projectatmosphere, applied by
+        // ProjectAtmosphereMixinPlugin under the same two conditions). This publishes the season's
+        // date once a tick for the hook, which Project Atmosphere also calls from worker threads.
+        if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)
+                && (Compat.isLoaded(Compat.DEEP_TIME) || ClimateConfig.Test.ENABLED))
+            ProjectAtmosphereBase.init();
 
         // /mic_climate probe|invalidate|pollution|mode -- the console's view of
         // what every bridged mod thinks the temperature is. Registered on the

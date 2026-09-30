@@ -86,6 +86,9 @@ Time. A GameTest compares `deepTime.enabled` on and off.
 
 ## Known limits
 
+(Phase 8, `plans/phase-08-atmosphere-base.md`, lifts most of the first limit below: an optional
+mixin gives Project Atmosphere Deep Time's climate as its own base.)
+
 **Project Atmosphere's own visible weather still comes from its biome-derived regions:**
 
 - snow and freeze decisions;

@@ -32,10 +32,11 @@ import java.util.Map;
  * it, and the pack's own unified value picks it back up through
  * {@code ProjectAtmosphereSource} rather than adding it a second time.
  *
- * <p>This and {@code ProjectAtmosphereSource} are the only classes here that
- * name {@code net.Gabou.*}. Only Project Atmosphere's public API is called and
- * nothing in this mod mixes into it: its licence permits compatible addons but
- * forbids modified builds.
+ * <p>Only Project Atmosphere's public API is called here. (The one place this
+ * mod mixes into Project Atmosphere is the optional Deep Time base hook,
+ * {@code ProjectAtmosphereBase} and {@code mixin.projectatmosphere}; with it
+ * active the region's seasonal base, which this controller's erosion
+ * estimate is measured against, is Deep Time's.)
  *
  * <h2>Why this is a controller and not a one-line write</h2>
  *

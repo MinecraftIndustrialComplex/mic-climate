@@ -278,8 +278,12 @@ Recommendation: move; the pack always ships both.
 ## 8. Licensing
 
 - Thermoo LGPL-3.0: depending on and linking it is fine; no source changes.
-- Project Atmosphere custom licence: compatible addons allowed, no redistribution or modified
-  builds. Use only its public API; never mixin into it; credit it in the pack listing.
+- Project Atmosphere (by Gabou/xGabou; its jar declares "All Rights Reserved"): no redistribution
+  or modified builds; credit it in the pack listing and in this mod's docs. Its public API only,
+  with one exception Ben chose on 2026-09-30 ("Mixin anyway"): the optional Deep Time base hook
+  (phase 8, `plans/phase-08-atmosphere-base.md`) mixes into five of its classes at runtime, in its
+  own config, only for Project Atmosphere versions it was checked against and only with Deep Time
+  installed. Its jar stays a `compileOnly` input in the gitignored `libs/`.
 - LSO all-rights-reserved: we compile against its `api`/`registry` classes (intended for
   integrations, and Project Atmosphere does the same). Do not ship any LSO code. Ask the author if
   publishing beyond the pack.

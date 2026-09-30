@@ -58,6 +58,7 @@ public final class ClimateConfig {
     private static ModConfigSpec.BooleanValue DEEP_TIME_ENABLED;
     private static ModConfigSpec.BooleanValue DEEP_TIME_WEATHER;
     private static ModConfigSpec.DoubleValue DEEP_TIME_MAX_ANOMALY;
+    private static ModConfigSpec.BooleanValue DEEP_TIME_PA_BASE;
     private static ModConfigSpec.BooleanValue POWERGRID_ENABLED;
     private static ModConfigSpec.BooleanValue DESTROY_ENABLED;
     private static ModConfigSpec.BooleanValue LSO_ENABLED;
@@ -170,6 +171,20 @@ public final class ClimateConfig {
                     "an ice cap into a desert."
             );
             DEEP_TIME_MAX_ANOMALY = builder.defineInRange("maxAnomaly", 20.0, 0.0, 100.0);
+
+            builder.comment(
+                    "Give Project Atmosphere itself Deep Time's climate as its base temperature, so that its own snow,",
+                    "ice, rain-or-snow, clouds, crop stress, thermometer and HUD follow the planet too, not only the",
+                    "machines and players that read mic-climate. Its base is otherwise built from biome base",
+                    "temperatures over 2000-block regions with one northern season for the whole world. With this on,",
+                    "in a Deep Time world, each region's seasonal base is Deep Time's monthly mean over that region",
+                    "at the season's date, and its per-block readings are Deep Time's value at the block plus the",
+                    "region's weather; Project Atmosphere's weather, day/night swing and dynamics stay on top.",
+                    "This mixes into Project Atmosphere's internals (it has no API for its base). The mixins are only",
+                    "applied to Project Atmosphere versions they were checked against and skip themselves with a log",
+                    "line otherwise. Needs deepTime.enabled. Worlds Deep Time did not generate are not affected."
+            );
+            DEEP_TIME_PA_BASE = builder.define("projectAtmosphereBase", true);
             builder.pop();
 
             builder.comment(
@@ -327,6 +342,8 @@ public final class ClimateConfig {
         private static volatile Boolean crownsEnabled;
         private static volatile Boolean deepTimeEnabled;
         private static volatile Boolean deepTimeWeather;
+        private static volatile Boolean projectAtmosphereBase;
+        private static volatile Float projectAtmosphereTestClimate;
 
         private Test() {}
 
@@ -405,6 +422,29 @@ public final class ClimateConfig {
             deepTimeWeather = value;
         }
 
+        public static void projectAtmosphereBase(Boolean value) {
+            check();
+            projectAtmosphereBase = value;
+        }
+
+        /**
+         * A stand-in climate for the Project Atmosphere base hook: a constant temperature, in
+         * &deg;C, that the hook treats as Deep Time's reading everywhere and in any level.
+         *
+         * <p>The GameTest server's world is not a Deep Time world, and Deep Time is not on its
+         * classpath, so this is the only way a test can watch the hook's mixins change what Project
+         * Atmosphere decides (its snow, ice, snapshot and crop stress) and change back.
+         */
+        public static void projectAtmosphereTestClimate(Float celsius) {
+            check();
+            projectAtmosphereTestClimate = celsius;
+        }
+
+        /** @return the stand-in climate, or {@code null} for the real one */
+        public static Float projectAtmosphereTestClimate() {
+            return ENABLED ? projectAtmosphereTestClimate : null;
+        }
+
         /** Hands every setting back to the config file. Call from a test's finally. */
         public static void clear() {
             check();
@@ -420,6 +460,8 @@ public final class ClimateConfig {
             crownsEnabled = null;
             deepTimeEnabled = null;
             deepTimeWeather = null;
+            projectAtmosphereBase = null;
+            projectAtmosphereTestClimate = null;
         }
 
         private static void check() {
@@ -505,6 +547,36 @@ public final class ClimateConfig {
         if (Test.deepTimeWeather != null)
             return Test.deepTimeWeather;
         return !loaded() || DEEP_TIME_WEATHER.get();
+    }
+
+    /**
+     * A {@code deepTime.projectAtmosphereBase} set by {@code /mic_climate atmosphere base} for this
+     * session, or {@code null} to use the file's value. Reachable in a normal game on purpose, like
+     * {@link #pollutionModeOverride()}: comparing Project Atmosphere's own reading with and without
+     * the hook, in one running world, is what the switch is for.
+     */
+    private static volatile Boolean projectAtmosphereBaseOverride;
+
+    /** @param value on/off for this session, or {@code null} to follow the config file again */
+    public static void projectAtmosphereBaseOverride(Boolean value) {
+        projectAtmosphereBaseOverride = value;
+    }
+
+    /** @return the session override, or {@code null} when the file is in charge */
+    public static Boolean projectAtmosphereBaseOverride() {
+        return projectAtmosphereBaseOverride;
+    }
+
+    /**
+     * {@code deepTime.projectAtmosphereBase}: Deep Time's climate as Project Atmosphere's own base in
+     * Deep Time worlds. The hook also needs {@link #deepTimeEnabled()}.
+     */
+    public static boolean projectAtmosphereBase() {
+        if (Test.projectAtmosphereBase != null)
+            return Test.projectAtmosphereBase;
+        if (projectAtmosphereBaseOverride != null)
+            return projectAtmosphereBaseOverride;
+        return !loaded() || DEEP_TIME_PA_BASE.get();
     }
 
     /** {@code deepTime.maxAnomaly}, degrees Celsius. */

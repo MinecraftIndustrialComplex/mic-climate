@@ -25,9 +25,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@code Compat.isLoaded("projectatmosphere")} guard, so on a pack without
  * Project Atmosphere the JVM never resolves these imports.
  *
- * <p>Only Project Atmosphere's public API is used, and nothing in this mod ever
- * mixes into it — its licence allows compatible addons but forbids modified
- * builds.
+ * <p>Only Project Atmosphere's public API is used here. The optional Deep Time
+ * base hook ({@code atmosphere.ProjectAtmosphereBase}, mixins in
+ * {@code mixin.projectatmosphere}) is the one place this mod mixes into it; in a
+ * Deep Time world it makes {@code getEffectiveBaseTemperature()} Deep Time's
+ * seasonal base for the region, which is what {@link #weatherAnomaly} subtracts.
  *
  * <p>The two sides read different things. Project Atmosphere simulates on the
  * server and syncs a per-biome daily forecast curve to clients, so the server
@@ -104,7 +106,9 @@ public final class ProjectAtmosphereSource {
      * <p>Server side, overworld only: Project Atmosphere simulates the overworld and its region keys
      * have no dimension, so any other dimension would read the overworld's weather at the same x/z.
      * {@code AtmosphericStateRegistry} and {@code RegionAtmosphereState} are public classes of Project
-     * Atmosphere that this mod already reads and writes for pollution; nothing is mixed into it.
+     * Atmosphere that this mod already reads and writes for pollution. With the Deep Time base hook
+     * active the effective base is Deep Time's seasonal base for the region, so the anomaly is the
+     * region's departure from Deep Time's climate; the hook's per-block readings add the same one.
      */
     @Nullable
     public static Float weatherAnomaly(ServerLevel level, BlockPos pos) {
