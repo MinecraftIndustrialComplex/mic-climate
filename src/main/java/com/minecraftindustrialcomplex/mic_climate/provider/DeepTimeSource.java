@@ -83,6 +83,85 @@ public final class DeepTimeSource {
         }
     }
 
+    /**
+     * Deep Time's mean temperature at the block at year fraction {@code yearFraction} (NaN: the
+     * annual mean), &deg;C, or NaN without a reading. The allocation-light twin of {@link #read}
+     * for the per-block hooks into Project Atmosphere ({@code atmosphere.ProjectAtmosphereBase}),
+     * which run from its snow, freeze and rain checks.
+     */
+    public static float celsiusAt(Level level, BlockPos pos, double yearFraction) {
+        try {
+            DeepTimeClimate climate = DeepTimeClimate.of(level);
+            ClimateSample s = climate.at(pos).orElse(null);
+            if (s == null)
+                return Float.NaN;
+            double t = Double.isNaN(yearFraction) ? s.meanC() : s.temperatureC(yearFraction);
+            return Double.isFinite(t) ? (float) t : Float.NaN;
+        } catch (Throwable t) {
+            logOnce(t);
+            return Float.NaN;
+        }
+    }
+
+    /**
+     * The twelve monthly means at sea level averaged over a {@code grid} &times; {@code grid} lattice
+     * covering the square {@code [minX, minX + size) x [minZ, minZ + size)}, or null without a
+     * climate there. Project Atmosphere's region base is a sea-level figure averaged over the region
+     * (its forecast samples every 64 blocks at sea level and applies no lapse rate), so this is the
+     * Deep Time quantity that stands in for it.
+     */
+    @Nullable
+    public static double[] regionMonthlyC(Level level, int minX, int minZ, int size, int grid) {
+        try {
+            DeepTimeClimate climate = DeepTimeClimate.of(level);
+            if (!climate.hasClimate())
+                return null;
+            int y = climate.seaLevelY();
+            double[] sum = new double[DeepTimeClimate.MONTHS];
+            int n = 0;
+            for (int i = 0; i < grid; i++) {
+                for (int j = 0; j < grid; j++) {
+                    int x = minX + (int) ((i + 0.5) * size / grid);
+                    int z = minZ + (int) ((j + 0.5) * size / grid);
+                    ClimateSample s = climate.at(x, y, z).orElse(null);
+                    if (s == null)
+                        continue;
+                    double[] m = s.monthlyC();
+                    for (int k = 0; k < sum.length; k++)
+                        sum[k] += m[k];
+                    n++;
+                }
+            }
+            if (n == 0)
+                return null;
+            for (int k = 0; k < sum.length; k++)
+                sum[k] /= n;
+            return sum;
+        } catch (Throwable t) {
+            logOnce(t);
+            return null;
+        }
+    }
+
+    /**
+     * Monthly means {@code v} at year fraction {@code f}: linear between the months' midpoints and
+     * periodic, exactly as {@code ClimateSample.temperatureC}; NaN {@code f} gives the annual mean.
+     */
+    public static double atYearFraction(double[] v, double f) {
+        if (Double.isNaN(f)) {
+            double s = 0;
+            for (double x : v)
+                s += x;
+            return s / v.length;
+        }
+        double u = (f - Math.floor(f)) * v.length - 0.5;
+        double fu = Math.floor(u);
+        double frac = u - fu;
+        int m0 = Math.floorMod((int) fu, v.length);
+        int m1 = (m0 + 1) % v.length;
+        return v[m0] + (v[m1] - v[m0]) * frac;
+    }
+
     /** One line for {@code /mic_climate probe}. */
     public static String describe(Reading r, double yearFraction, String calendar) {
         return String.format(Locale.ROOT,

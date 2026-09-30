@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * dedicated server with nobody logged in its regions keep their creation values and there is no
  * weather to see. This calls the same two public entry points its own level tick calls when a
  * player is there ({@code AtmosphericUpdateScheduler.tick}, whose passive pass updates every region,
- * and {@code SeasonalAtmosphericDrift.tick}). Nothing is mixed into Project Atmosphere.
+ * and {@code SeasonalAtmosphericDrift.tick}). The driver itself mixes nothing into Project Atmosphere.
  */
 final class AtmosphereDriver {
 

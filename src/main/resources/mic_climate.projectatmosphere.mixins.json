@@ -1,0 +1,17 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.minecraftindustrialcomplex.mic_climate.mixin.projectatmosphere",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereMixinPlugin",
+  "mixins": [
+    "RegionAtmosphereStateMixin",
+    "AtmoApiMixin",
+    "ForecastOrchestratorMixin",
+    "LocalBiomeTemperatureResolverMixin",
+    "CropStressManagerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
