@@ -88,6 +88,20 @@ public final class ClimateCommands {
         mode.then(Commands.literal("config").executes(ctx -> setMode(ctx, null)));
         root.then(mode);
 
+        // Headless test servers only (-Dmic_climate.driveAtmosphere=true): run Project
+        // Atmosphere's regional simulation without a player online (see AtmosphereDriver).
+        if (Boolean.getBoolean("mic_climate.driveAtmosphere") && Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)) {
+            root.then(Commands.literal("atmosphere").then(Commands.literal("drive")
+                    .then(Commands.argument("ticks", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 72000))
+                            .executes(ctx -> {
+                                int ticks = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "ticks");
+                                AtmosphereDriver.drive(ctx.getSource().getServer().overworld(), ticks);
+                                ctx.getSource().sendSuccess(() -> Component.literal(
+                                        "mic_climate: driving Project Atmosphere's overworld simulation for " + ticks + " ticks"), true);
+                                return 1;
+                            }))));
+        }
+
         dispatcher.register(root);
     }
 
@@ -137,10 +151,14 @@ public final class ClimateCommands {
         if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE))
             lines.add(AtmosphereProbe.probeLine(level, pos));
 
+        if (Compat.isLoaded(Compat.DEEP_TIME))
+            lines.addAll(DeepTimeProbe.probeLines(level, pos));
+
         lines.add(String.format(
                 Locale.ROOT,
-                "config     : source=%s pollution.mode=%s%s multiplier=%.2f cacheTicks=%d",
+                "config     : source=%s deepTime=%s pollution.mode=%s%s multiplier=%.2f cacheTicks=%d",
                 ClimateConfig.source(),
+                ClimateConfig.deepTimeEnabled() ? (ClimateConfig.deepTimeWeather() ? "on+weather" : "on") : "off",
                 ClimateConfig.pollutionMode(),
                 ClimateConfig.pollutionModeOverride() == null ? "" : " (session override)",
                 ClimateConfig.pollutionMultiplier(),

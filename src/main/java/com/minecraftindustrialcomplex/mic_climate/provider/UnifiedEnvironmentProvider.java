@@ -78,6 +78,19 @@ public final class UnifiedEnvironmentProvider implements EnvironmentProvider {
     ) {
         ClimateConfig.Source source = ClimateConfig.source();
 
+        // Deep Time worlds: the planet's own climate is the base, Project Atmosphere adds weather.
+        if (ClimateConfig.deepTimeEnabled() && Compat.isLoaded(Compat.DEEP_TIME)) {
+            DeepTimeTemperature dt = deepTime(world, pos, source);
+            if (dt != null) {
+                float celsius = dt.celsius();
+                if (this.pollution && Compat.isLoaded(Compat.DESTROY)
+                        && (ClimateConfig.pollutionMode() != ClimateConfig.PollutionMode.ATMOSPHERE || !dt.withWeather()))
+                    celsius += DestroyPollutionShift.shift(world);
+                builder.set(EnvironmentComponentTypes.TEMPERATURE, new TemperatureRecord(celsius, TemperatureUnit.CELSIUS));
+                return;
+            }
+        }
+
         Float celsius = null;
         if (source != ClimateConfig.Source.THERMOO && Compat.isLoaded(Compat.PROJECT_ATMOSPHERE))
             celsius = ProjectAtmosphereSource.celsius(world, pos, biome);
@@ -100,6 +113,51 @@ public final class UnifiedEnvironmentProvider implements EnvironmentProvider {
                 EnvironmentComponentTypes.TEMPERATURE,
                 new TemperatureRecord(celsius, TemperatureUnit.CELSIUS)
         );
+    }
+
+    /**
+     * The temperature in a Deep Time world, before pollution.
+     *
+     * @param celsius     Deep Time's monthly mean at the block (its height and the season's date)
+     *                    plus Project Atmosphere's weather anomaly when that was added
+     * @param base        Deep Time's part alone
+     * @param anomaly     the anomaly added (0 when none), after the cap
+     * @param withWeather whether Project Atmosphere's anomaly (and with it any pollution pushed into
+     *                    it) is in {@code celsius}
+     */
+    public record DeepTimeTemperature(float celsius, float base, float anomaly, boolean withWeather) {}
+
+    /**
+     * Deep Time's climate plus Project Atmosphere's weather, or {@code null} when the level is not a
+     * Deep Time world with a simulated climate (then the usual sources answer).
+     *
+     * <p>Why an anomaly and not Project Atmosphere's own number: Project Atmosphere derives its
+     * regional base from biome base temperatures (through a per-biome table that has no entries for
+     * Terralith's biomes, which then count as 0 &deg;C), averages it over 2000-block regions (about
+     * a quarter of a 16k Deep Time planet's pole-to-pole height) and applies one global season offset
+     * to both hemispheres; none of that can be corrected through its API (its base is final, and
+     * written temperatures erode within a few updates). So the base comes from the planet and only
+     * the departure of Project Atmosphere's live weather from its own base is kept. The season comes
+     * from Deep Time's monthly curve at the Serene Seasons date ({@link YearClock}), so Project
+     * Atmosphere's season offset cancels out of the anomaly rather than being counted twice.
+     */
+    @org.jetbrains.annotations.Nullable
+    public static DeepTimeTemperature deepTime(Level world, BlockPos pos, ClimateConfig.Source source) {
+        YearClock.Date date = YearClock.now(world);
+        DeepTimeSource.Reading reading = DeepTimeSource.read(world, pos, date.yearFraction());
+        if (reading == null)
+            return null;
+        Float anomaly = null;
+        if (ClimateConfig.deepTimeWeather() && source != ClimateConfig.Source.THERMOO
+                && Compat.isLoaded(Compat.PROJECT_ATMOSPHERE) && world instanceof net.minecraft.server.level.ServerLevel server)
+            anomaly = ProjectAtmosphereSource.weatherAnomaly(server, pos);
+        float capped = anomaly == null ? 0f : cap(anomaly, ClimateConfig.deepTimeMaxAnomaly());
+        return new DeepTimeTemperature(reading.celsius() + capped, reading.celsius(), capped, anomaly != null);
+    }
+
+    /** {@code anomaly} limited to ±{@code max}. */
+    public static float cap(float anomaly, float max) {
+        return Math.max(-max, Math.min(max, anomaly));
     }
 
     /**

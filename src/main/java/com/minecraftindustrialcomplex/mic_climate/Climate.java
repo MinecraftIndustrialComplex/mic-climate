@@ -10,7 +10,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponentMap;
-import net.minecraft.world.level.ChunkPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.Level;
 
 import java.util.Collections;
@@ -29,7 +29,7 @@ import java.util.WeakHashMap;
  * <p><b>Why the cache.</b> Power Grid asks for the ambient temperature from
  * wire updates, which happen every tick on every wire in the world, and the
  * lookup behind it walks a provider list and builds a component map. The value
- * is region-and-biome resolution anyway, so it is cached per chunk for
+ * is region-and-biome resolution anyway, so it is cached per chunk section (16 blocks cubed) for
  * {@link ClimateConfig#cacheTicks()} ticks and nothing is lost by it.
  *
  * <p><b>Why it never throws.</b> Ambient temperature gets asked for from
@@ -77,7 +77,7 @@ public final class Climate {
         }
 
         LevelSamples samples = LEVELS.computeIfAbsent(level, unused -> new LevelSamples());
-        long chunk = ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4);
+        long chunk = cacheKey(pos);
 
         long now;
         try {
@@ -144,12 +144,22 @@ public final class Climate {
             return -1;
         }
 
-        Long tick = samples.tick(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4));
+        Long tick = samples.tick(cacheKey(pos));
         if (tick == null || now < tick)
             return -1;
 
         long age = now - tick;
         return age >= ClimateConfig.cacheTicks() ? -1 : (int) age;
+    }
+
+    /**
+     * The cache cell of a position: its 16-block chunk section. Per section rather than per chunk
+     * column because in a Deep Time world the temperature falls with height (the planet's lapse rate,
+     * about 0.13 degrees per block at its default scale), so a machine on a mountain top and one in
+     * the valley below must not share a sample.
+     */
+    private static long cacheKey(BlockPos pos) {
+        return SectionPos.asLong(pos.getX() >> 4, pos.getY() >> 4, pos.getZ() >> 4);
     }
 
     private static float lookup(Level level, BlockPos pos) {

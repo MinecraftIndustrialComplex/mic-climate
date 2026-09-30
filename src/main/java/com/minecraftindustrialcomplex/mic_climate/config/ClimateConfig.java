@@ -55,6 +55,9 @@ public final class ClimateConfig {
     private static ModConfigSpec.DoubleValue POLLUTION_MULTIPLIER;
     private static final Map<ThermooSeason, ModConfigSpec.DoubleValue> SEASON_OFFSETS =
             new EnumMap<>(ThermooSeason.class);
+    private static ModConfigSpec.BooleanValue DEEP_TIME_ENABLED;
+    private static ModConfigSpec.BooleanValue DEEP_TIME_WEATHER;
+    private static ModConfigSpec.DoubleValue DEEP_TIME_MAX_ANOMALY;
     private static ModConfigSpec.BooleanValue POWERGRID_ENABLED;
     private static ModConfigSpec.BooleanValue DESTROY_ENABLED;
     private static ModConfigSpec.BooleanValue LSO_ENABLED;
@@ -142,6 +145,31 @@ public final class ClimateConfig {
                         offsetKey(season), defaultSeasonOffset(season), -50.0, 50.0));
             }
 
+            builder.pop();
+
+            builder.comment(
+                    "Deep Time worlds (the deeptime mod): the planet's simulated climate as the base temperature.",
+                    "In a Deep Time world the biome is only a coarse band chosen from a simulated climate; Deep Time",
+                    "publishes the climate itself (monthly means per block, the lapse rate at the block's height).",
+                    "With this on, the unified temperature there is Deep Time's monthly mean at the Serene Seasons",
+                    "date (opposite seasons north and south of the equator), plus Project Atmosphere's weather and",
+                    "time-of-day swing (its live regional temperature minus its own regional base), plus pollution.",
+                    "Worlds Deep Time did not generate are not affected."
+            ).push("deepTime");
+            DEEP_TIME_ENABLED = builder.define("enabled", true);
+
+            builder.comment(
+                    "Add Project Atmosphere's weather and day/night swing on top of Deep Time's climate. Off gives",
+                    "the bare monthly mean. Needs Project Atmosphere; without it nothing is added."
+            );
+            DEEP_TIME_WEATHER = builder.define("weatherAnomaly", true);
+
+            builder.comment(
+                    "The largest weather swing, in degrees Celsius either way, taken from Project Atmosphere. Its",
+                    "regional state can drift far from its own base in edge cases; this keeps a glitch from turning",
+                    "an ice cap into a desert."
+            );
+            DEEP_TIME_MAX_ANOMALY = builder.defineInRange("maxAnomaly", 20.0, 0.0, 100.0);
             builder.pop();
 
             builder.comment(
@@ -297,6 +325,8 @@ public final class ClimateConfig {
         private static volatile Boolean lsoEnabled;
         private static volatile Boolean lsoDeviceHeatEnabled;
         private static volatile Boolean crownsEnabled;
+        private static volatile Boolean deepTimeEnabled;
+        private static volatile Boolean deepTimeWeather;
 
         private Test() {}
 
@@ -365,6 +395,16 @@ public final class ClimateConfig {
             crownsEnabled = value;
         }
 
+        public static void deepTimeEnabled(Boolean value) {
+            check();
+            deepTimeEnabled = value;
+        }
+
+        public static void deepTimeWeather(Boolean value) {
+            check();
+            deepTimeWeather = value;
+        }
+
         /** Hands every setting back to the config file. Call from a test's finally. */
         public static void clear() {
             check();
@@ -378,6 +418,8 @@ public final class ClimateConfig {
             lsoEnabled = null;
             lsoDeviceHeatEnabled = null;
             crownsEnabled = null;
+            deepTimeEnabled = null;
+            deepTimeWeather = null;
         }
 
         private static void check() {
@@ -449,6 +491,25 @@ public final class ClimateConfig {
         if (value == null)
             return 0f;
         return loaded() ? value.get().floatValue() : (float) defaultSeasonOffset(season);
+    }
+
+    /** {@code deepTime.enabled}: Deep Time's simulated climate as the base in Deep Time worlds. */
+    public static boolean deepTimeEnabled() {
+        if (Test.deepTimeEnabled != null)
+            return Test.deepTimeEnabled;
+        return !loaded() || DEEP_TIME_ENABLED.get();
+    }
+
+    /** {@code deepTime.weatherAnomaly}: add Project Atmosphere's weather swing on top. */
+    public static boolean deepTimeWeather() {
+        if (Test.deepTimeWeather != null)
+            return Test.deepTimeWeather;
+        return !loaded() || DEEP_TIME_WEATHER.get();
+    }
+
+    /** {@code deepTime.maxAnomaly}, degrees Celsius. */
+    public static float deepTimeMaxAnomaly() {
+        return loaded() ? DEEP_TIME_MAX_ANOMALY.get().floatValue() : 20f;
     }
 
     public static boolean powergridEnabled() {

@@ -51,7 +51,10 @@ sampler=$!
 trap 'kill "$sampler" 2>/dev/null' EXIT
 
 start=$(date +%s)
-nix develop -c ./gradlew runGameTestServer --console=plain "$@" 2>&1 | tee "$LOG"
+# Inside a dev shell already (IN_NIX_SHELL: e.g. a remote runner that provides JDK 21 itself, where
+# this flake's Linux-only libraries do not build)? Then run Gradle directly.
+dev() { if [ -n "${IN_NIX_SHELL:-}" ]; then "$@"; else nix develop -c "$@"; fi; }
+dev ./gradlew runGameTestServer --console=plain "$@" 2>&1 | tee "$LOG"
 status=${PIPESTATUS[0]}
 elapsed=$(( $(date +%s) - start ))
 
