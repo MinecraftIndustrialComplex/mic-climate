@@ -29,7 +29,7 @@ public final class PlanetLatitude {
     /**
      * Latitude in degrees (north positive, clamped to ±90) of block {@code z} in {@code level}, or
      * NaN when the hemisphere seasons do not apply there: not a Deep Time planet, or switched off
-     * ({@code deepTime.enabled}, {@code deepTime.hemisphereSeasons}).
+     * ({@code deepTime.hemisphereSeasons} in the server config).
      */
     public static double latitude(Level level, double z) {
         if (level == null || !switchedOn())
@@ -51,9 +51,12 @@ public final class PlanetLatitude {
         return LatitudeSeasons.strength(latitudeDeg, ClimateConfig.fullSeasonLatitude());
     }
 
-    /** Whether the hemisphere seasons are switched on at all (not whether this is a planet). */
+    /**
+     * Whether the hemisphere seasons are switched on at all (not whether this is a planet): the
+     * server config's {@code deepTime.hemisphereSeasons}, which clients receive when they join.
+     */
     public static boolean switchedOn() {
-        return ClimateConfig.deepTimeEnabled() && ClimateConfig.hemisphereSeasons();
+        return ClimateConfig.hemisphereSeasons();
     }
 
     /** The planet's circumference for {@code level}, or 0; for the probe and the client's re-mesh trigger. */

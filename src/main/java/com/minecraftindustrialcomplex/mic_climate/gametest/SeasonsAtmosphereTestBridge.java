@@ -35,6 +35,11 @@ final class SeasonsAtmosphereTestBridge {
         return ProjectAtmosphereSeasons.describe(level, pos);
     }
 
+    /** Whether its tropical wet/dry stage would apply at {@code pos} for a tropical biome. */
+    static boolean tropicalStage(ServerLevel level, BlockPos pos) {
+        return ProjectAtmosphereSeasons.tropical(level, pos, true);
+    }
+
     static int boundTargets() {
         return ProjectAtmosphereSeasons.boundTargets();
     }

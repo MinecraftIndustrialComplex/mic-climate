@@ -309,7 +309,7 @@ public final class ClimateCommands {
                 Locale.ROOT,
                 "mic_climate: deepTime.hemisphereSeasons = %s (%s), full-season latitude %.1f",
                 ClimateConfig.hemisphereSeasons(),
-                override == null ? "from mic_climate-common.toml" : "session override",
+                override == null ? "from the world's mic_climate-server.toml" : "session override",
                 ClimateConfig.fullSeasonLatitude())), false);
         return 1;
     }
@@ -318,7 +318,7 @@ public final class ClimateCommands {
         ClimateConfig.hemisphereSeasonsOverride(value);
         ctx.getSource().sendSuccess(() -> Component.literal(String.format(
                 Locale.ROOT,
-                "mic_climate: deepTime.hemisphereSeasons = %s (%s; clients keep their own setting for colours)",
+                "mic_climate: deepTime.hemisphereSeasons = %s (%s; clients of a dedicated server keep the synced file value for colours)",
                 ClimateConfig.hemisphereSeasons(),
                 value == null ? "session override cleared" : "session override")), true);
         return 1;

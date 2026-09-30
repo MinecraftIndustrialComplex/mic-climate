@@ -276,7 +276,7 @@ Recommendation: move; the pack always ships both.
 | `lso.deviceHeat.enabled`, `.tempScalar`, `.rangeScalar` | true, 0.04, 0.5 | device proximity heat |
 | `deepTime.enabled`, `.weatherAnomaly`, `.maxAnomaly` | true, true, 20 | phase 7: Deep Time's climate as the base |
 | `deepTime.projectAtmosphereBase` | true | phase 8: Deep Time's climate as Project Atmosphere's base |
-| `deepTime.hemisphereSeasons`, `.fullSeasonLatitude` | true, 45 | phase 9: seasons by latitude on Deep Time planets |
+| `deepTime.hemisphereSeasons`, `.fullSeasonLatitude` (the world's `mic_climate-server.toml`, synced to clients) | true, 45 | phase 9: seasons by latitude on Deep Time planets |
 
 ## 8. Licensing
 

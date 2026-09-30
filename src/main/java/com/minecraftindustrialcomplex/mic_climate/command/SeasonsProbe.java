@@ -1,5 +1,6 @@
 package com.minecraftindustrialcomplex.mic_climate.command;
 
+import com.minecraftindustrialcomplex.mic_climate.seasons.LatitudeSeasons;
 import com.minecraftindustrialcomplex.mic_climate.seasons.PlanetLatitude;
 import com.minecraftindustrialcomplex.mic_climate.seasons.SeasonsHooked;
 import com.minecraftindustrialcomplex.mic_climate.seasons.SereneSeasonsHemispheres;
@@ -25,6 +26,8 @@ import java.util.Locale;
 final class SeasonsProbe {
 
     private static final String CROP = "minecraft:wheat";
+    /** A spring and autumn crop: grows in the seasonless band only because every crop is in season there. */
+    private static final String OFF_SEASON_CROP = "minecraft:carrots";
 
     private SeasonsProbe() {}
 
@@ -35,11 +38,15 @@ final class SeasonsProbe {
         float t = SeasonHooks.getBiomeTemperature(level, biome, pos);
         float levels = SeasonHooks.getBiomeTemperatureInSeason(global.getSubSeason(), biome, pos);
         boolean fertile = ModFertility.isCropFertile(CROP, level, pos);
+        boolean offSeason = ModFertility.isCropFertile(OFF_SEASON_CROP, level, pos);
+        double lat = here.latitude();
+        double tropical = Double.isNaN(lat) ? 0 : LatitudeSeasons.tropicalStrength(lat);
         SeasonsConfig.SeasonProperties melt = ModConfig.seasons.getSeasonProperties(here.discrete());
         return ClimateCommands.line("seasons", here.discrete().name(), String.format(Locale.ROOT,
-                "(%s; SS temperature %.3f, level's %.3f, snow/ice below 0.15: %s; wheat %s; melt %.2f%% x%d; C %d, hooks %d/4)",
-                here.describe(), t, levels, t < 0.15f ? "yes" : "no", fertile ? "grows" : "does not grow",
-                melt.meltChance(), melt.meltRolls(), PlanetLatitude.circumference(level), boundTargets()));
+                "(%s; tropical wet/dry strength %.2f; SS temperature %.3f, level's %.3f, snow/ice below 0.15: %s; wheat %s, carrots %s; melt %.2f%% x%d; C %d, hooks %d/4)",
+                here.describe(), tropical, t, levels, t < 0.15f ? "yes" : "no", fertile ? "grow" : "no",
+                offSeason ? "grow" : "no", melt.meltChance(), melt.meltRolls(), PlanetLatitude.circumference(level),
+                boundTargets()));
     }
 
     /** How many of the four server-side Serene Seasons classes the hemisphere-season mixins reached. */

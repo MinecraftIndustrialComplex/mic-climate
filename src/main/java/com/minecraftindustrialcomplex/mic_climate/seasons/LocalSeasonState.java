@@ -34,6 +34,17 @@ public final class LocalSeasonState implements ISeasonState {
         this.tropicalSeason = LatitudeSeasons.shiftTropical(global.getTropicalSeason().ordinal(), south);
     }
 
+    private LocalSeasonState(ISeasonState global, Season.SubSeason subSeason) {
+        this.global = global;
+        this.subSeason = subSeason.ordinal();
+        this.tropicalSeason = global.getTropicalSeason().ordinal();
+    }
+
+    /** {@code global}'s durations and progress, in the middle sub-season of {@code season}. */
+    public static LocalSeasonState inSeason(ISeasonState global, Season season) {
+        return new LocalSeasonState(global, Season.SubSeason.VALUES[season.ordinal() * 3 + 1]);
+    }
+
     @Override
     public int getDayDuration() {
         return global.getDayDuration();

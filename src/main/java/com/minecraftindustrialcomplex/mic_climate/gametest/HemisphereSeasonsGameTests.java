@@ -38,6 +38,8 @@ public final class HemisphereSeasonsGameTests {
     /** The stand-in planet's circumference: 16,384 blocks, one of Deep Time's sizes. */
     private static final int C = 16_384;
     private static final String WHEAT = "minecraft:wheat";
+    /** Spring and autumn only, in Serene Seasons' tags. */
+    private static final String CARROTS = "minecraft:carrots";
 
     private HemisphereSeasonsGameTests() {}
 
@@ -69,6 +71,16 @@ public final class HemisphereSeasonsGameTests {
                         && LatitudeSeasons.discrete(Season.SubSeason.MID_WINTER, 11.25, 0.15625) == Season.SubSeason.EARLY_SUMMER
                         && LatitudeSeasons.discrete(Season.SubSeason.MID_WINTER, 0, 0) == Season.SubSeason.MID_SUMMER
                         && LatitudeSeasons.discrete(Season.SubSeason.MID_SUMMER, -45, 1.0) == Season.SubSeason.MID_WINTER);
+        GameTests.assertTrue("the seasonless band: strength up to 1/12 (5 degrees in, 11.25 out)",
+                LatitudeSeasons.seasonless(LatitudeSeasons.strength(5, full))
+                        && !LatitudeSeasons.seasonless(LatitudeSeasons.strength(11.25, full))
+                        && LatitudeSeasons.seasonless(1.0 / 12.0));
+        GameTests.assertNear("tropical wet/dry strength at the equator", LatitudeSeasons.tropicalStrength(0), 0, 0);
+        GameTests.assertNear("tropical wet/dry strength at 5 S", LatitudeSeasons.tropicalStrength(-5), 0, 0);
+        GameTests.assertNear("tropical wet/dry strength at 7.5 N", LatitudeSeasons.tropicalStrength(7.5), 0.5, 1e-12);
+        GameTests.assertNear("tropical wet/dry strength at 15 S", LatitudeSeasons.tropicalStrength(-15), 1, 0);
+        GameTests.assertNear("tropical wet/dry strength at 22.5 N", LatitudeSeasons.tropicalStrength(22.5), 0.5, 1e-12);
+        GameTests.assertNear("tropical wet/dry strength at 30 N", LatitudeSeasons.tropicalStrength(30), 0, 0);
         GameTests.assertTrue("colours blend channel by channel",
                 LatitudeSeasons.lerpRgb(0x00000000, 0xFFFFFFFF, 0.5) == 0x80808080
                         && LatitudeSeasons.lerpRgb(0x123456, 0xABCDEF, 0) == 0x123456
@@ -140,14 +152,19 @@ public final class HemisphereSeasonsGameTests {
             ClimateConfig.Test.deepTimeEnabled(true);
             ClimateConfig.Test.hemisphereSeasons(true);
 
-            // Is wheat here seasonal at all (a temperate biome under open sky)? Serene Seasons' own answer.
+            // Are wheat and carrots seasonal here at all (a temperate biome under open sky)? Serene
+            // Seasons' own answer.
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.MID_SPRING);
+            boolean springCarrots = SeasonsTestBridge.fertile(CARROTS, level, pos);
             SeasonsTestBridge.setSeason(level, Season.SubSeason.MID_SUMMER);
             boolean summerWheat = SeasonsTestBridge.fertile(WHEAT, level, pos);
+            boolean summerCarrots = SeasonsTestBridge.fertile(CARROTS, level, pos);
             SeasonsTestBridge.setSeason(level, Season.SubSeason.MID_WINTER);
             boolean winterWheat = SeasonsTestBridge.fertile(WHEAT, level, pos);
-            boolean crops = summerWheat && !winterWheat;
-            GameTests.record("wheat at the test position, Serene Seasons alone: summer / winter",
-                    summerWheat + " / " + winterWheat + (crops ? "" : " (not seasonal here: fertility checks skipped)")
+            boolean crops = summerWheat && !winterWheat && springCarrots && !summerCarrots;
+            GameTests.record("at the test position, Serene Seasons alone: wheat summer / winter, carrots spring / summer",
+                    summerWheat + " / " + winterWheat + ", " + springCarrots + " / " + summerCarrots
+                            + (crops ? "" : " (not seasonal here: fertility checks skipped)")
                             + ", biome " + level.getBiome(pos).getRegisteredName());
 
             GameTests.assertTrue("the level is at Mid Winter", SeasonsTestBridge.subSeason(level) == Season.SubSeason.MID_WINTER);
@@ -156,13 +173,15 @@ public final class HemisphereSeasonsGameTests {
             GameTests.record("Serene Seasons' plains temperature, Mid Winter / Mid Summer", winter + " / " + summer);
             GameTests.assertTrue("plains snow in Serene Seasons' winter and not in its summer", winter < 0.15f && summer >= 0.15f);
 
-            // Northern midwinter.
-            checkAt(helper, level, plains, pos, 45, winter, Season.SubSeason.MID_WINTER, crops ? Boolean.FALSE : null);
-            checkAt(helper, level, plains, pos, 30, Float.NaN, Season.SubSeason.EARLY_SPRING, null);
-            checkAt(helper, level, plains, pos, 11.25, LatitudeSeasons.lerp(summer, winter, 0.15625),
-                    Season.SubSeason.EARLY_SUMMER, crops ? Boolean.TRUE : null);
-            checkAt(helper, level, plains, pos, 0, summer, Season.SubSeason.MID_SUMMER, crops ? Boolean.TRUE : null);
-            checkAt(helper, level, plains, pos, -45, summer, Season.SubSeason.MID_SUMMER, crops ? Boolean.TRUE : null);
+            // Northern midwinter. Carrots grow at 30 N (its early spring) and in the seasonless band
+            // (5 N, the equator) where every crop is in season, not at 11.25 N (its early summer).
+            checkAt(level, plains, pos, 45, winter, Season.SubSeason.MID_WINTER, crops, false, false);
+            checkAt(level, plains, pos, 30, Float.NaN, Season.SubSeason.EARLY_SPRING, crops, false, true);
+            checkAt(level, plains, pos, 11.25, LatitudeSeasons.lerp(summer, winter, 0.15625),
+                    Season.SubSeason.EARLY_SUMMER, crops, true, false);
+            checkAt(level, plains, pos, 5, Float.NaN, Season.SubSeason.MID_SUMMER, crops, true, true);
+            checkAt(level, plains, pos, 0, summer, Season.SubSeason.MID_SUMMER, crops, true, true);
+            checkAt(level, plains, pos, -45, summer, Season.SubSeason.MID_SUMMER, crops, true, false);
 
             // Melting: a chunk at 45 S melts at Serene Seasons' summer rate while the level has none.
             ChunkPos chunk = new ChunkPos(pos);
@@ -180,9 +199,9 @@ public final class HemisphereSeasonsGameTests {
 
             // Northern midsummer: the other way round.
             SeasonsTestBridge.setSeason(level, Season.SubSeason.MID_SUMMER);
-            checkAt(helper, level, plains, pos, 45, summer, Season.SubSeason.MID_SUMMER, crops ? Boolean.TRUE : null);
-            checkAt(helper, level, plains, pos, 0, summer, Season.SubSeason.MID_SUMMER, crops ? Boolean.TRUE : null);
-            checkAt(helper, level, plains, pos, -45, winter, Season.SubSeason.MID_WINTER, crops ? Boolean.FALSE : null);
+            checkAt(level, plains, pos, 45, summer, Season.SubSeason.MID_SUMMER, crops, true, false);
+            checkAt(level, plains, pos, 0, summer, Season.SubSeason.MID_SUMMER, crops, true, true);
+            checkAt(level, plains, pos, -45, winter, Season.SubSeason.MID_WINTER, crops, false, false);
 
             // Switched off on the planet, and off the planet: Serene Seasons' own again.
             planetWith(pos.getZ(), -45);
@@ -202,10 +221,11 @@ public final class HemisphereSeasonsGameTests {
     /**
      * Puts {@code pos} at {@code latitude} on the stand-in planet and checks Serene Seasons there:
      * its temperature equals {@code temperature} (NaN: not checked), the sub-season decisions use is
-     * {@code discrete}, and wheat's fertility is {@code wheat} (null: not checked).
+     * {@code discrete}, and, when {@code crops} (the position is seasonal at all), wheat's and
+     * carrots' fertility are {@code wheat} and {@code carrots}.
      */
-    private static void checkAt(GameTestHelper helper, ServerLevel level, Holder<Biome> plains, BlockPos pos,
-                                double latitude, float temperature, Season.SubSeason discrete, Boolean wheat) {
+    private static void checkAt(ServerLevel level, Holder<Biome> plains, BlockPos pos, double latitude, float temperature,
+                                Season.SubSeason discrete, boolean crops, boolean wheat, boolean carrots) {
         planetWith(pos.getZ(), latitude);
         String at = String.format(Locale.ROOT, "%s, %.2f%s", SeasonsTestBridge.subSeason(level),
                 Math.abs(latitude), latitude < 0 ? "S" : "N");
@@ -216,15 +236,30 @@ public final class HemisphereSeasonsGameTests {
         GameTests.assertTrue(at + ": decisions use " + discrete + ", got " + here.discrete(), here.discrete() == discrete);
         if (!Float.isNaN(temperature))
             GameTests.assertNear(at + ": Serene Seasons' temperature", SeasonsTestBridge.temperature(level, plains, pos), temperature, 1e-5);
-        if (wheat != null)
+        if (crops) {
             GameTests.assertTrue(at + ": wheat " + (wheat ? "grows" : "does not grow"),
                     SeasonsTestBridge.fertile(WHEAT, level, pos) == wheat);
+            GameTests.assertTrue(at + ": carrots " + (carrots ? "grow" : "do not grow"),
+                    SeasonsTestBridge.fertile(CARROTS, level, pos) == carrots);
+        }
     }
 
     /** The stand-in planet, with its equator placed so that block row {@code z} is at {@code latitude}. */
     private static void planetWith(int z, double latitude) {
         int equatorZ = z + (int) Math.round(latitude * C / 360.0);
         ClimateConfig.Test.seasonTestPlanet(new ClimateConfig.Test.TestPlanet(C, equatorZ));
+    }
+
+    /**
+     * The two settings live in the world's server config, which NeoForge syncs to clients, and read
+     * their defaults (on, 45 degrees) from it.
+     */
+    @GameTest(template = GameTests.TEMPLATE, timeoutTicks = 100)
+    public static void hemisphereSeasonsServerConfig(GameTestHelper helper) {
+        GameTests.assertTrue("the world's server config (mic_climate-server.toml) is loaded", ClimateConfig.serverLoaded());
+        GameTests.assertTrue("deepTime.hemisphereSeasons is on by default", ClimateConfig.hemisphereSeasons());
+        GameTests.assertNear("deepTime.fullSeasonLatitude defaults to 45", ClimateConfig.fullSeasonLatitude(), 45.0, 0.0);
+        helper.succeed();
     }
 
     /** The mixins into Serene Seasons (and Serene Seasons Plus, Project Atmosphere when present) bound. */
@@ -325,6 +360,17 @@ public final class HemisphereSeasonsGameTests {
             GameTests.assertTrue("45 S: summer", south.startsWith("SUMMER/"));
             GameTests.assertTrue("level-wide: still winter", levelWide.startsWith("WINTER/"));
             GameTests.assertTrue("southern summer sunlight is stronger than northern winter's", sunSouth > sunNorth);
+            // Its tropical wet/dry stage keeps its own band, whatever the temperate seasons do.
+            StringBuilder band = new StringBuilder();
+            boolean ok = true;
+            for (double lat : new double[] {2, 7, 8, 15, 22, 23, 30, -15, -2}) {
+                planetWith(pos.getZ(), lat);
+                boolean wetDry = SeasonsAtmosphereTestBridge.tropicalStage(level, pos);
+                band.append(lat).append(':').append(wetDry).append(' ');
+                ok &= wetDry == (Math.abs(lat) >= 7.5 && Math.abs(lat) <= 22.5);
+            }
+            GameTests.record("its tropical wet/dry stage applies at (latitude:yes)", band.toString().trim());
+            GameTests.assertTrue("its tropical wet/dry stage applies from 7.5 to 22.5 degrees, both hemispheres", ok);
         } catch (Throwable t) {
             if (t instanceof RuntimeException r)
                 throw r;

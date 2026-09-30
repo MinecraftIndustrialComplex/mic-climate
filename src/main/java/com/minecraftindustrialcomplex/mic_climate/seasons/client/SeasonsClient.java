@@ -29,7 +29,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * mods registered through {@code SeasonColorHandlers.registerResolverOverride} (added "for other
  * mods" in 2024). That override is used here, with no mixin: on a Deep Time planet it recolours
  * the block with Serene Seasons' own {@code applySeasonal*Colouring} for the hemisphere's
- * (sub-)season, then blends toward the biome's own colour (Mid Summer's) by the season's strength.
+ * (sub-)season, then blends toward the biome's own colour (Mid Summer's, and Early Dry's) by the
+ * season's strength: the tropical wet/dry cycle's in Serene Seasons' tropical biomes, the temperate
+ * seasons' everywhere else.
  * Off a planet, north of the full-season latitude, or on any error it returns Serene Seasons'
  * colour untouched.
  *
@@ -82,11 +84,14 @@ public final class SeasonsClient {
             double lat = PlanetLatitude.latitude(level, z);
             if (Double.isNaN(lat))
                 return current;
-            double w = PlanetLatitude.strength(lat);
+            // Serene Seasons' tropical biomes follow the tropical wet/dry cycle, which has its own
+            // latitude band; everything else follows the temperate seasons.
+            boolean tropical = SeasonHelper.usesTropicalSeasons(biome);
+            double w = tropical ? LatitudeSeasons.tropicalStrength(lat) : PlanetLatitude.strength(lat);
             if (LatitudeSeasons.unchanged(lat, w))
                 return current;
             ISeasonState global = SeasonHelper.getSeasonState(level);
-            ISeasonColorProvider provider = SeasonHelper.usesTropicalSeasons(biome)
+            ISeasonColorProvider provider = tropical
                     ? LatitudeSeasons.shifted(global.getTropicalSeason(), lat)
                     : LatitudeSeasons.shifted(global.getSubSeason(), lat);
             int local = grass

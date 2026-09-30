@@ -22,7 +22,8 @@ import sereneseasons.api.season.ISeasonState;
  * and reads Serene Seasons' level-wide state. On a Deep Time planet, asked with a position, it now
  * reads the local state there (the hemisphere's season, pulled toward Mid Summer where the seasons
  * fade), in {@code snapshot} and in its tropical {@code moistureStage}; the tropical wet/dry stage
- * is dropped where the seasons have faded. Level-wide calls (no position) are unchanged.
+ * applies in its own band (7.5 to 22.5 degrees), inverted in the south. Level-wide calls (no
+ * position) are unchanged.
  */
 @Pseudo
 @Mixin(targets = "net.Gabou.projectatmosphere.seasons.SereneSeasonsSeasonDelegate", remap = false)

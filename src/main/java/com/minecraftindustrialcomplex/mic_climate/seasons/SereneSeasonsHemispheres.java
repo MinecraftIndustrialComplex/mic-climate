@@ -10,12 +10,16 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.FoliageColor;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.chunk.LevelChunk;
 import org.jetbrains.annotations.Nullable;
 import sereneseasons.api.season.ISeasonState;
 import sereneseasons.api.season.Season;
+import sereneseasons.api.season.SeasonHelper;
 import sereneseasons.config.SeasonsConfig;
 import sereneseasons.init.ModConfig;
+import sereneseasons.init.ModFertility;
+import sereneseasons.init.ModTags;
 
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -44,6 +48,12 @@ public final class SereneSeasonsHemispheres {
      */
     @Nullable
     private static LevelChunk lastMeltChunk;
+
+    /**
+     * The season {@link #yearRoundCrop} is asking Serene Seasons about, on this thread, while it asks;
+     * {@link #discreteState} answers it. Null otherwise.
+     */
+    private static final ThreadLocal<Season> ASKING = new ThreadLocal<>();
 
     private SereneSeasonsHemispheres() {}
 
@@ -84,7 +94,58 @@ public final class SereneSeasonsHemispheres {
      * Atmosphere's regional season use it. {@code global} when there is nothing to change.
      */
     public static ISeasonState discreteState(Level level, @Nullable BlockPos pos, ISeasonState global) {
+        Season asking = ASKING.get();
+        if (asking != null && global != null)
+            return LocalSeasonState.inSeason(global, asking);
         return localState(level, pos, global, true);
+    }
+
+    /**
+     * Serene Seasons' crop fertility, with every crop in season in the seasonless band near the equator
+     * (Ben, 2026-09-30: "Let them grow year-round"). Outside the band, or when Serene Seasons already
+     * says fertile, its answer stands. Inside, a crop it refused is asked about again in each of the
+     * four seasons, through its own {@code isCropFertile}, and grows if any season lets it: its other
+     * rules (infertile biomes, cold biomes' winter crops, greenhouse, underground) still decide.
+     */
+    public static boolean yearRoundCrop(boolean fertile, String crop, Level level, @Nullable BlockPos pos) {
+        if (fertile || pos == null || ASKING.get() != null)
+            return fertile;
+        try {
+            if (!inSeasonlessBand(level, pos))
+                return false;
+            for (Season season : Season.values()) {
+                ASKING.set(season);
+                if (ModFertility.isCropFertile(crop, level, pos))
+                    return true;
+            }
+            return false;
+        } catch (Throwable t) {
+            logOnce(t);
+            return fertile;
+        } finally {
+            ASKING.remove();
+        }
+    }
+
+    /**
+     * Serene Seasons' "is this a tropical biome" as its crop fertility asks it: false in the seasonless
+     * band, so tropical biomes there grow every crop too rather than only the summer ones (its tropical
+     * rule); its answer everywhere else, and for every other tag.
+     */
+    public static boolean cropBiomeTag(TagKey<Biome> tag, boolean original, Level level, @Nullable BlockPos pos) {
+        if (!original || pos == null || tag != ModTags.Biomes.TROPICAL_BIOMES)
+            return original;
+        try {
+            return !inSeasonlessBand(level, pos);
+        } catch (Throwable t) {
+            logOnce(t);
+            return original;
+        }
+    }
+
+    private static boolean inSeasonlessBand(Level level, BlockPos pos) {
+        double lat = PlanetLatitude.latitude(level, pos.getZ());
+        return !Double.isNaN(lat) && LatitudeSeasons.seasonless(PlanetLatitude.strength(lat));
     }
 
     /** The season state for a blended quantity at {@code pos}: shifted, not faded (the caller fades). */
@@ -111,16 +172,19 @@ public final class SereneSeasonsHemispheres {
 
     /**
      * A birch leaf colour Serene Seasons computed for the local season, blended toward vanilla's
-     * birch colour (Mid Summer's) by the season's strength at {@code pos}.
+     * birch colour (Mid Summer's, and Early Dry's) by the season's strength at {@code pos}: the
+     * tropical cycle's strength in Serene Seasons' tropical biomes, the temperate one elsewhere.
      */
     public static int birchColour(Level level, @Nullable BlockPos pos, int colour) {
-        if (pos == null)
+        if (pos == null || level == null)
             return colour;
         try {
             double lat = PlanetLatitude.latitude(level, pos.getZ());
             if (Double.isNaN(lat))
                 return colour;
-            return LatitudeSeasons.lerpRgb(FoliageColor.getBirchColor(), colour, PlanetLatitude.strength(lat));
+            double strength = SeasonHelper.usesTropicalSeasons(level.getBiome(pos))
+                    ? LatitudeSeasons.tropicalStrength(lat) : PlanetLatitude.strength(lat);
+            return LatitudeSeasons.lerpRgb(FoliageColor.getBirchColor(), colour, strength);
         } catch (Throwable t) {
             logOnce(t);
             return colour;

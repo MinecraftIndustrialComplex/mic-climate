@@ -42,9 +42,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   <li><b>Regional season</b> ({@link #delegateState}): asked with a position on a planet, the
  *       delegate reads the local season state (hemisphere-shifted, pulled toward Mid Summer where
  *       the seasons fade), the same one Serene Seasons' crop and melt decisions use there. Its
- *       tropical wet/dry stage is dropped where the seasons have faded below
- *       {@link LatitudeSeasons#TROPICAL_CUTOFF} ({@link #tropical}). Level-wide calls stay
- *       global.</li>
+ *       tropical wet/dry stage keeps its own band, 7.5 to 22.5 degrees, inverted in the south
+ *       ({@link #tropical}). Level-wide calls stay global.</li>
  *   <li><b>Sunlight</b> ({@link #sunlight}): the season's sunlight multiplier, which scales every
  *       region's day heating, is level-wide. Each region's heating is rescaled by its own season's
  *       multiplier over the level's.</li>
@@ -88,14 +87,17 @@ public final class ProjectAtmosphereSeasons {
 
     /**
      * Whether Project Atmosphere's tropical wet/dry stage applies at {@code pos}: its own answer
-     * (Serene Seasons' tropical biomes), except where the seasons have faded toward the equator.
+     * (Serene Seasons' tropical biomes), inside the tropical band only (7.5 to 22.5 degrees, where the
+     * wet/dry cycle's strength is at least {@link LatitudeSeasons#TROPICAL_CUTOFF}), shifted half a year
+     * in the south by the local state. The wet/dry cycle does not fade with the temperate seasons
+     * (Ben, 2026-09-30: "Exempt wet/dry").
      */
     public static boolean tropical(Level level, @Nullable BlockPos pos, boolean original) {
         if (!original || pos == null)
             return original;
         try {
             double lat = PlanetLatitude.latitude(level, pos.getZ());
-            return Double.isNaN(lat) || PlanetLatitude.strength(lat) >= LatitudeSeasons.TROPICAL_CUTOFF;
+            return Double.isNaN(lat) || LatitudeSeasons.tropicalStrength(lat) >= LatitudeSeasons.TROPICAL_CUTOFF;
         } catch (Throwable t) {
             logOnce(t);
             return original;

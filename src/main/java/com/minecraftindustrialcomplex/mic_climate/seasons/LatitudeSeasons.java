@@ -39,6 +39,18 @@ import sereneseasons.api.season.Season;
  *       default 45 degrees, winter as Serene Seasons sees it is found only poleward of about 33
  *       degrees, Mid Summer all year within about 8 degrees of the equator.</li>
  * </ul>
+ *
+ * <p>Two things are exempt from the fading (Ben, 2026-09-30):
+ *
+ * <ul>
+ *   <li><b>Crops grow year-round in the seasonless band</b> ({@link #seasonless}), where the discrete
+ *       season never leaves Mid Summer: every crop counts as in season there, spring- and
+ *       autumn-only ones too.</li>
+ *   <li><b>The tropical wet/dry cycle</b> has its own strength ({@link #tropicalStrength}): none within
+ *       5 degrees of the equator, full between 10 and 20 degrees, none beyond 25, shifted half a year
+ *       in the south like everything else. Serene Seasons uses it for its tropical biomes' colours and
+ *       Project Atmosphere for its tropical moisture stage.</li>
+ * </ul>
  */
 public final class LatitudeSeasons {
 
@@ -55,8 +67,18 @@ public final class LatitudeSeasons {
     public static final Season.SubSeason NEUTRAL = Season.SubSeason.MID_SUMMER;
 
     /**
-     * The strength below which the discrete tropical wet/dry season is dropped altogether (Project
-     * Atmosphere's moisture stage): about 22.5 degrees with the default full latitude.
+     * The strength at or below which the discrete season is Mid Summer all year (the damped offset of
+     * every sub-season rounds to 0): the seasonless band, about 7.9 degrees either side of the equator
+     * with the default full latitude.
+     */
+    public static final double SEASONLESS_STRENGTH = 1.0 / 12.0;
+
+    /** Where the tropical wet/dry cycle starts, reaches full strength, starts to fade, and ends (degrees). */
+    public static final double TROPICS_START = 5.0, TROPICS_FULL = 10.0, TROPICS_FADE = 20.0, TROPICS_END = 25.0;
+
+    /**
+     * The tropical strength at or above which Project Atmosphere's discrete tropical moisture stage
+     * (wet or dry) applies: from 7.5 to 22.5 degrees.
      */
     public static final double TROPICAL_CUTOFF = 0.5;
 
@@ -70,7 +92,31 @@ public final class LatitudeSeasons {
     public static double strength(double latitudeDeg, double fullLatitudeDeg) {
         if (!(fullLatitudeDeg > 0))
             return 1.0;
-        double t = Math.min(1.0, Math.abs(latitudeDeg) / fullLatitudeDeg);
+        return smooth(Math.min(1.0, Math.abs(latitudeDeg) / fullLatitudeDeg));
+    }
+
+    /** True in the seasonless band, where every crop counts as in season. */
+    public static boolean seasonless(double strength) {
+        return strength <= SEASONLESS_STRENGTH;
+    }
+
+    /**
+     * Strength of the tropical wet/dry cycle at {@code latitudeDeg}: 0 within {@link #TROPICS_START}
+     * degrees of the equator and beyond {@link #TROPICS_END}, 1 from {@link #TROPICS_FULL} to
+     * {@link #TROPICS_FADE}, smoothsteps between.
+     */
+    public static double tropicalStrength(double latitudeDeg) {
+        double a = Math.abs(latitudeDeg);
+        if (a <= TROPICS_START || a >= TROPICS_END)
+            return 0.0;
+        if (a < TROPICS_FULL)
+            return smooth((a - TROPICS_START) / (TROPICS_FULL - TROPICS_START));
+        if (a <= TROPICS_FADE)
+            return 1.0;
+        return smooth((TROPICS_END - a) / (TROPICS_END - TROPICS_FADE));
+    }
+
+    private static double smooth(double t) {
         return t * t * (3.0 - 2.0 * t);
     }
 
