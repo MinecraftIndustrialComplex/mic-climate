@@ -18,6 +18,8 @@ public final class Compat {
     public static final String THERMOO_PATCHES = "thermoo_patches";
     public static final String LEGENDARY_SURVIVAL_OVERHAUL = "legendarysurvivaloverhaul";
     public static final String CROWNS = "crowns";
+    public static final String DEEP_TIME = "deeptime";
+    public static final String SERENE_SEASONS = "sereneseasons";
 
     private Compat() {}
 

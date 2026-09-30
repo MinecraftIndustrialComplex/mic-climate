@@ -93,3 +93,12 @@ description = '''${mod_description}'''
     versionRange = "[0,)"
     ordering     = "AFTER"
     side         = "BOTH"
+
+# Deep Time (optional): in its worlds the planet's simulated climate is the base temperature
+# (provider.DeepTimeSource, Deep Time's public climate API).
+[[dependencies.${mod_id}]]
+    modId        = "deeptime"
+    type         = "optional"
+    versionRange = "[0,)"
+    ordering     = "AFTER"
+    side         = "BOTH"

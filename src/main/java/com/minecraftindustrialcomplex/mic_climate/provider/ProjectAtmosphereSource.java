@@ -4,6 +4,9 @@ import com.minecraftindustrialcomplex.mic_climate.MicClimate;
 import net.Gabou.projectatmosphere.api.AtmoApi;
 import net.Gabou.projectatmosphere.api.WeatherSnapshot;
 import net.Gabou.projectatmosphere.client.BiomeClientTemperatureCache;
+import net.Gabou.projectatmosphere.modules.atmosphere.AtmosphericStateRegistry;
+import net.Gabou.projectatmosphere.modules.atmosphere.RegionAtmosphereState;
+import net.Gabou.projectatmosphere.util.RegionInstanceKey;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceKey;
@@ -80,6 +83,60 @@ public final class ProjectAtmosphereSource {
         } catch (Throwable t) {
             if (LOGGED_FAILURE.compareAndSet(false, true))
                 MicClimate.LOGGER.debug("Project Atmosphere temperature lookup failed; using the fallback", t);
+            return null;
+        }
+    }
+
+    /**
+     * Project Atmosphere's weather at a position as an <em>anomaly</em>: its live regional
+     * temperature minus the region's own effective base (the base it derived from the biomes plus
+     * its season offset), or {@code null} when there is no live region there.
+     *
+     * <p>This is the part of Project Atmosphere's temperature that is weather rather than climate:
+     * the day/night swing (the region is pulled between its baseline minimum and maximum by
+     * sunlight), rain and cloud cooling, the day-to-day forecast and whatever neighbouring regions
+     * advect in. It is what a Deep Time world adds on top of the planet's own climate, because the
+     * absolute value is built from biome base temperatures, over 2000-block regions, and does not
+     * know the planet (see {@code UnifiedEnvironmentProvider}). Pollution pushed into the region in
+     * {@code pollution.mode = ATMOSPHERE} shows up here too, since it moves the live value and not
+     * the base.
+     *
+     * <p>Server side, overworld only: Project Atmosphere simulates the overworld and its region keys
+     * have no dimension, so any other dimension would read the overworld's weather at the same x/z.
+     * {@code AtmosphericStateRegistry} and {@code RegionAtmosphereState} are public classes of Project
+     * Atmosphere that this mod already reads and writes for pollution; nothing is mixed into it.
+     */
+    @Nullable
+    public static Float weatherAnomaly(ServerLevel level, BlockPos pos) {
+        try {
+            if (level.dimension() != Level.OVERWORLD)
+                return null;
+            RegionAtmosphereState state = AtmosphericStateRegistry.getState(RegionInstanceKey.from(pos));
+            if (state == null)
+                return null;
+            // A region Project Atmosphere created but has not simulated yet (it only simulates while
+            // players are online) still holds its base exactly: its live value then carries none of
+            // the season offset the effective base includes, so it has no weather to report.
+            if (state.getTemperature() == state.getBaseTemperature())
+                return null;
+            float anomaly = state.getTemperature() - state.getEffectiveBaseTemperature();
+            return Float.isFinite(anomaly) ? anomaly : null;
+        } catch (Throwable t) {
+            if (LOGGED_FAILURE.compareAndSet(false, true))
+                MicClimate.LOGGER.debug("Project Atmosphere anomaly lookup failed; adding no weather", t);
+            return null;
+        }
+    }
+
+    /** The region's live and effective-base temperatures, for the probe; null without a live region. */
+    @Nullable
+    public static float[] regionTemperatures(ServerLevel level, BlockPos pos) {
+        try {
+            RegionAtmosphereState state = AtmosphericStateRegistry.getState(RegionInstanceKey.from(pos));
+            if (state == null)
+                return null;
+            return new float[] {state.getTemperature(), state.getEffectiveBaseTemperature(), state.getBaseTemperature()};
+        } catch (Throwable t) {
             return null;
         }
     }

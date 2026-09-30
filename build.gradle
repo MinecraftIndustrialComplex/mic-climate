@@ -162,6 +162,15 @@ dependencies {
     // compatible addons but forbids redistribution and modified builds.
     compileOnly(files("${project.projectDir}/libs/NeoForge-projectatmosphere-${project_atmosphere_version_number}.jar"))
     compileOnly("maven.modrinth:create-crowns:${crowns_version}")
+    // Serene Seasons' public API (sereneseasons.api.season): the date Deep Time's monthly climate
+    // is read at (provider.SereneSeasonsClock). Optional at runtime.
+    compileOnly("maven.modrinth:serene-seasons:${sereneseasons_version}")
+    // Deep Time's public climate API (com.minecraftindustrialcomplex.deeptime.api.climate), read by
+    // provider.DeepTimeSource in Deep Time worlds. compileOnly and optional at runtime: without Deep
+    // Time the class is never loaded. Deep Time is not on a maven; build it (its neoforge/ module,
+    // `./gradlew jar`) and copy build/libs/deeptime-1.21.1-<version>.jar to
+    // libs/deeptime-${minecraft_version}.jar. libs/ is gitignored.
+    compileOnly(files("${project.projectDir}/libs/deeptime-${minecraft_version}.jar"))
 
     // ------------------------------------------------------------------
     // GameTest runtime (phase 5). Nothing below is on any compile classpath;
