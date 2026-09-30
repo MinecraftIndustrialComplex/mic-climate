@@ -519,3 +519,9 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
     Atmosphere's reading throughout, so the warming is counted once. A first pass showed Project Atmosphere's own lazy
     region orchestrator regenerating a region (new forecast, live reset to base) on the first per-block question about
     it; the demo now asks once before its baseline.
+  - **Real client on the Mac: not possible with this mod set.** Deep Time's Mac client runner
+    (`tools/client/mac-client.sh`, `-PrunSet` with Project Atmosphere, Serene Seasons (+Plus), Simple Clouds,
+    Gabou's Libs, Architectury, Thermoo and this branch's jar) got as far as mod loading, then Simple Clouds' and
+    Project Atmosphere's shaders failed to compile: they need GLSL 4.30 and macOS's OpenGL stops at 4.1
+    (`version '430' is not supported`), so NeoForge refused to continue. Neither mod can run on any macOS client, so
+    the on-screen rain/snow check needs a Linux or Windows client; the decision itself is covered by the GameTests.
