@@ -173,7 +173,8 @@ cannot answer), `pollution` (bool, default true).
 4. `builder.set(EnvironmentComponentTypes.TEMPERATURE, new TemperatureRecord(T, CELSIUS))`.
    Leave humidity to the base provider (or set from PA's snapshot when available — optional).
 
-Datapack: one `EnvironmentDefinition` for `#minecraft:is_overworld` at priority 2000 pointing at
+Datapack: one `EnvironmentDefinition` for `#mic_climate:overworld` (`#minecraft:is_overworld` plus the Terralith
+biomes that tag misses, added 2026-09-30) at priority 2000 pointing at
 `mic_climate:unified` with `base` = Thermoo's temperate-seasonal provider (check its id in
 Thermoo's own data). Nether/End keep Thermoo's defaults. No `neoforge:conditions` guard is needed on the definition:
 thermoo is a required dependency, so the datapack registry always exists.
