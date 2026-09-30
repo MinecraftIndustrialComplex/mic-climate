@@ -168,11 +168,17 @@ tropics) agree, because Deep Time picks those biomes from its climate.
 **Serene Seasons' own effects and Project Atmosphere's seasonal humidity, pressure and
 cloud-water modifiers stay global** (northern). Only temperature is per hemisphere.
 
-**A region's first simulated minutes carry a transient.** A region created before the hook
-(or restored from a save made without it) starts from Project Atmosphere's biome-derived
-temperature. The scheduler pulls it onto Deep Time's base within a few updates: seconds for
-regions near a player, a couple of minutes for the rest. Until then its anomaly is large, and the
-cap bounds it.
+**A region's live temperature can lag its base, and then its anomaly is large until Project
+Atmosphere simulates it again.** The cap (`deepTime.maxAnomaly`) bounds it. Three ways it happens:
+
+- a region created before the hook, or restored from a save made without it, starts from Project
+  Atmosphere's biome-derived temperature;
+- a region saved while the hook was on reads Deep Time-based after the hook is switched off;
+- the date jumps (`/season set`, or a long headless stretch) while nobody is online to simulate.
+
+The scheduler pulls the region onto its base within a few updates: seconds near a player, a couple
+of minutes for the rest. The planet probe's second pass saw the third case: it reused a world whose
+regions were saved in midwinter, then read them in midsummer undriven.
 
 **Project Atmosphere's forecast regions are untouched.** Their persisted biome-built weeks remain
 in the save. Three things still read them directly:

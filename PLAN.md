@@ -448,3 +448,46 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
   mixin implements `net.Gabou.gaboulibs.util.ISnowStormLevel`; hard deps gaboulibs ≥1.8.1, simpleclouds ≥0.7.3, optional SSP ≥5.1.1)
   and Gabou's Libs 1.9 (CurseForge project 1367332 / file 8774265); SSP stays 5.1.2. Both projects are delisted from Modrinth,
   so their update tracking is CurseForge now. Phase 6 agent is re-verifying mic-climate against the 0.9.1.2 API before the smoke run.
+- **2026-09-30 phase 8 (Deep Time's climate as Project Atmosphere's own base) built on branch `pa-hook`** — Ben's
+  "Mixin anyway" after being told Project Atmosphere is All Rights Reserved and its API cannot set a base. Design,
+  gating and limits: `plans/phase-08-atmosphere-base.md`. Five `@Pseudo` mixins in their own config
+  (`mic_climate.projectatmosphere.mixins.json`, `"required": false`, `defaultRequire: 0`), applied by
+  `atmosphere.ProjectAtmosphereMixinPlugin` only to Project Atmosphere `[0.9.1.2,0.9.2)`, only with Deep Time
+  installed (or in a GameTest run), and only when every target method and wrapped call is in its jar (read straight
+  from the mod file: ModLauncher's mixin service refuses untransformed bytecode, which the first run proved by
+  skipping all five with one log line each and the GameTests failing, as designed). Runtime switch
+  `deepTime.projectAtmosphereBase` (default true), active only in a Deep Time overworld with a climate.
+  - **GameTests** (Mac, `tools/remote/mic-climate.sh`): `./gametest.sh` 22/22 (the three new tests skip),
+    `-PwithAtmosphere` 22/22 with 5/5 hook targets bound: with a −30 °C / +40 °C stand-in climate Project Atmosphere's
+    snapshot, rain-or-snow and snow/freeze temperatures read it exactly, it lays snow and freezes water only at −30,
+    flags cold then heat crop stress, and the region's seasonal base is the stand-in with the forecast's day shape and
+    band width kept; outside Deep Time, or switched off, its numbers are its own bit for bit.
+  - **Pack smoke** (`smoke/install.sh` + `run.py`, the real pack from Deep Time's snapshot, 166 mods, no Deep Time):
+    **20/20**; the plugin logs "not applied: Deep Time is not installed". It first failed 0/1 with master's jar too: a
+    peer's server on the Mac held Simple Voice Chat's UDP 24454, and the smoke server's JVM shut down right after its
+    voice chat failed to bind. Passing run: voice chat moved to 24464 in the smoke server's config.
+  - **Real Deep Time planet** (earthlike_quick_16k, scattered continents, 500 Myr; Deep Time master ba8019a), hook off
+    then on in one world via `/mic_climate atmosphere base off|on`. Four of P1-25's five sites are sea on today's
+    planet (Af, BWk, Dfc and EF all probe as ocean; ET is `terralith:cold_shrubland`), so a second pass scanned
+    `/deeptime climate` on a grid and picked land sites. Midwinter noon, Project Atmosphere driven 3000 ticks each way,
+    °C:
+
+    | Site | Deep Time | PA off: AtmoApi / rain-or-snow / snow-freeze | PA on (all three) | on, midnight |
+    |---|---|---|---|---|
+    | Af, bamboo jungle, 260 m (−7168, 0) | 25.2 | −0.4 / −3.0 / 16.6 | 27.1 | 23.6 |
+    | BWk, badlands, 800 m, south (512, 1024) | 23.2 | −6.7 / −7.4 / 3.1 (lays snow) | 23.8 (no snow) | 22.9 |
+    | Dfc, spruce taiga, 220 m (−4608, −2304) | −3.5 | −3.4 / −4.2 / −13.8 | −2.9 | −4.3 |
+    | ET, snowy badlands, 460 m (−8192, −3328) | −21.8 | 0.5 / −1.0 / 2.0 | −20.4 | −22.8 |
+    | EF, ice spikes, 20 m (−6144, −3584) | −21.1 | −0.9 / −2.9 / −35.6 | −19.6 | −22.7 |
+
+    With the hook on, all three of Project Atmosphere's readings equal mic-climate's unified value (Deep Time + its
+    weather anomaly) to the hundredth, in every phase. Region seasonal bases (Deep Time's, sea level): Af 22.5, BWk
+    23.8 (southern summer), Dfc −11.0, ET −12.0, EF −10.4, against Project Atmosphere's own −2.4, −7.4, −3.9, −0.8
+    and −2.4 (its biome table has almost none of these Terralith/Deep Time biomes). On the first, fresh-world pass
+    (undriven, so no anomaly), Project Atmosphere's own reading was 0.2–4.3 °C at all five P1-25 coordinates in both
+    seasons, and its rain-or-snow temperature over the equatorial sea was −5.7 °C in northern winter (snow in the
+    tropics); with the hook both equalled Deep Time (26.4 there), and the southern ice-cap sea read −6.8 in northern
+    summer and +4.7 in northern winter, opposite to the north.
+  - Finding, not this phase's: at `terralith:deep_warm_ocean` (which Deep Time places) the unified provider does not
+    answer and Thermoo returns its default 20.00 °C (the Af coordinate on the first pass), most likely because that
+    biome is not in `#minecraft:is_overworld`, the tag `thermoo/environment/overworld.json` selects.
