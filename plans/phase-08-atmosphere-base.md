@@ -55,7 +55,7 @@ What reads which:
 | `AtmoApi.getWeatherSnapshot` (other mods, the HUD sync, world effects) | the region's live temperature | the public reading and `isSnowing` |
 | `CropStressManager.evaluate(ServerLevel, BlockPos)` | the region's live temperature | heat (> 35 °C) and cold (< 0 °C) stress |
 | clouds (`CloudRegionEvolutionController`), `WeatherSampler`, seasonal drift | the region's live temperature and targets | cloud evolution, sampled weather |
-| client rain/snow rendering | the client cache, per biome | what falls on screen |
+| client rain/snow rendering | not Project Atmosphere at all: Serene Seasons' `getPrecipitationAtSeasonal` (vanilla biome temperature + its season), asked by Simple Clouds' renderer through `Biome.getPrecipitationAt` (corrected in phase 9) | what falls on screen |
 
 ## The hook
 
@@ -159,11 +159,10 @@ probe and the GameTests can tell which ones bound.
 
 ## Known limits
 
-**The client still renders from Project Atmosphere's per-biome cache.** That cache is one flat
-value per biome, sent at login, averaged over regions in both hemispheres. It cannot be made right
-per hemisphere without syncing Deep Time's climate to clients. So falling rain or snow on screen
-can disagree with the server's ice and snow layers in mid-latitude biomes. The extremes (ice caps,
-tropics) agree, because Deep Time picks those biomes from its climate.
+**What falls on screen is not decided by this phase.** (Phase 9 corrects this entry: the client's
+rain or snow comes from Serene Seasons, not from Project Atmosphere's per-biome cache, and phase 9
+sends each player a Deep Time table and hooks that decision.) Before phase 9, falling rain or snow
+on screen could disagree with the server's ice and snow layers in mid-latitude biomes.
 
 **Serene Seasons' own effects and Project Atmosphere's seasonal humidity, pressure and
 cloud-water modifiers stay global** (northern). Only temperature is per hemisphere.

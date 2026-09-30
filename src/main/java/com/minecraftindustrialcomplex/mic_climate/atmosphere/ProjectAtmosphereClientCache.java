@@ -44,7 +44,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *       distance, at most 192 blocks), the mean of Project Atmosphere's hooked temperature there:
  *       Deep Time's monthly mean at that block plus the region's weather anomaly and pollution, the
  *       same number the server decides rain or snow by;</li>
- *   <li>Project Atmosphere's own values for every other biome;</li>
+ *   <li>nothing for any other biome (the client then keeps Serene Seasons' answer there, and Project
+ *       Atmosphere's own client checks see no value), since Project Atmosphere's per-biome averages
+ *       mix both hemispheres;</li>
  *   <li>a marker entry, {@link #MARKER}, so the client knows the table is Deep Time's
  *       ({@link #deepTimeCacheReceived()}): {@code ProjectAtmosphereClientPrecipitation} then decides
  *       rain or snow on screen from it.</li>
@@ -145,8 +147,9 @@ public final class ProjectAtmosphereClientCache {
     }
 
     private static void send(ServerPlayer player, @Nullable Map<ResourceLocation, float[]> snapshot) {
-        Map<ResourceLocation, float[]> table = new HashMap<>(snapshot == null ? Map.of() : snapshot);
-        table.putAll(local(player.serverLevel(), player.blockPosition(), radius(player)));
+        // Only the place's own values: a biome with no value here falls back to Serene Seasons' answer
+        // on the client, not to Project Atmosphere's average over both hemispheres.
+        Map<ResourceLocation, float[]> table = new HashMap<>(local(player.serverLevel(), player.blockPosition(), radius(player)));
         table.put(MARKER, flat(MARKER_VALUE));
         PacketDistributor.sendToPlayer(player, new BiomeDayTemperaturePacket(table));
         SENT.put(player.getUUID(), new Sent(player.serverLevel().getGameTime(), player.getBlockX(), player.getBlockZ(), true));
@@ -239,17 +242,43 @@ public final class ProjectAtmosphereClientCache {
         try {
             if (original == Biome.Precipitation.NONE || level == null || !level.isClientSide() || biome == null)
                 return original;
-            if (!ClimateConfig.projectAtmosphereClient() || !deepTimeCacheReceived())
+            if (!ClimateConfig.projectAtmosphereClient() || !deepTimeCacheReceived()) {
+                if (DEV_LOG && original != Biome.Precipitation.NONE)
+                    devLog(biome.unwrapKey().orElse(null), Float.NaN, original, original);
                 return original;
+            }
             ResourceKey<Biome> key = biome.unwrapKey().orElse(null);
             float t = key == null ? Float.NaN : cached(key);
             if (Float.isNaN(t))
                 return original;
-            return decide(t);
+            Biome.Precipitation result = decide(t);
+            if (DEV_LOG)
+                devLog(key, t, original, result);
+            return result;
         } catch (Throwable e) {
             ProjectAtmosphereBase.logOnce(e);
             return original;
         }
+    }
+
+    /**
+     * {@code -Dmic_climate.dev.precipitationLog=true}: log each biome's decision (table value, Serene
+     * Seasons' answer, the hook's) at most once per five seconds, for real-client checks.
+     */
+    private static final boolean DEV_LOG = Boolean.getBoolean("mic_climate.dev.precipitationLog");
+    private static final Map<String, Long> DEV_LOGGED = new ConcurrentHashMap<>();
+
+    private static void devLog(@Nullable ResourceKey<Biome> biome, float celsius, Biome.Precipitation original,
+                               Biome.Precipitation result) {
+        String k = (biome == null ? "?" : biome.location()) + "|" + original + "|" + result + "|" + Float.isNaN(celsius);
+        long now = System.currentTimeMillis();
+        Long last = DEV_LOGGED.get(k);
+        if (last != null && now - last < 5000)
+            return;
+        DEV_LOGGED.put(k, now);
+        MicClimate.LOGGER.info("[mic_climate-precip] {}: Deep Time table {}; Serene Seasons said {}, falls as {}",
+                biome == null ? "?" : biome.location(),
+                Float.isNaN(celsius) ? "absent" : String.format(java.util.Locale.ROOT, "%.2f C", celsius), original, result);
     }
 
     /** Snow below 0 &deg;C, rain otherwise: Project Atmosphere's own freezing line. */
