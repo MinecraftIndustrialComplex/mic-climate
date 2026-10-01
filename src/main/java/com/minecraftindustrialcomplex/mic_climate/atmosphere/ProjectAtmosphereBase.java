@@ -57,7 +57,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * because it is part of what Project Atmosphere relaxes toward. The per-block readings that are
  * built from the forecast rather than the live region (rain or snow, snow and freeze) get it added
  * directly; the ones built from the live region (the snapshot, crop stress) already carry it once
- * the region has simulated.
+ * the region has simulated. For the unified value (machines) the warming is counted once, the hybrid
+ * way ({@link #pollutionCorrection}): at Project Atmosphere's pace where it actively simulates the
+ * region, at once everywhere else, which needs an estimate of how much of the warming each region's
+ * live temperature holds ({@link #onScheduledUpdate}, fed by the scheduler mixin).
  *
  * <p><b>When.</b> The Deep Time part: {@code deepTime.enabled} and {@code
  * deepTime.projectAtmosphereBase}, in the overworld of a Deep Time world with a climate. The
@@ -86,6 +89,21 @@ public final class ProjectAtmosphereBase {
     /** Lattice size for a region's Deep Time mean: 5 x 5 points, 400 blocks apart. */
     private static final int REGION_GRID = 5;
 
+    /**
+     * A region counts as simulated by Project Atmosphere when its scheduler gave it an ACTIVE update
+     * (the pass for regions within 1000 blocks of a player, every 20 ticks) within this many ticks:
+     * three active passes, so one missed callback does not flip it.
+     */
+    public static final int SIMULATING_TICKS = 60;
+
+    /**
+     * How far one scheduler update moves a region's live temperature toward a step in its targets,
+     * from Project Atmosphere's own constants: scale x (sunlight blend + forecast restore 0.04) +
+     * relax factor. ACTIVE: 1 x (0.6 + 0.04) + 0.0012; PASSIVE: 0.35 x (0.45 + 0.04) + 0.00035.
+     */
+    private static final float ABSORB_ACTIVE = 0.6412f;
+    private static final float ABSORB_PASSIVE = 0.1719f;
+
     private static final AtomicBoolean LOGGED_FAILURE = new AtomicBoolean();
     private static final AtomicBoolean LOGGED_ACTIVE = new AtomicBoolean();
     private static final AtomicBoolean LOGGED_POLLUTION = new AtomicBoolean();
@@ -100,12 +118,22 @@ public final class ProjectAtmosphereBase {
         volatile long dateTick = Long.MIN_VALUE;
         /** Destroy's warming in the overworld, degrees, as published on the server thread. */
         volatile float pollution;
+        /** Per region: how much of the warming its live temperature holds, and its last active update. */
+        final Map<RegionInstanceKey, Absorbed> absorbed = new ConcurrentHashMap<>();
 
         Context(ServerLevel overworld) {
             this.overworld = overworld;
             this.climate = Compat.isLoaded(Compat.DEEP_TIME) && DeepTimeSource.hasClimate(overworld);
         }
     }
+
+    /**
+     * How much of Destroy's warming one region's live temperature has taken up, as Project
+     * Atmosphere's scheduler moved it ({@link #onScheduledUpdate}); {@code state} is the identity of
+     * the {@code RegionAtmosphereState} it describes (Project Atmosphere replaces states), and
+     * {@code lastActive} the game time of its last ACTIVE update, or MIN_VALUE.
+     */
+    private record Absorbed(int state, float amount, long lastActive) {}
 
     @Nullable
     private static volatile Context context;
@@ -252,23 +280,107 @@ public final class ProjectAtmosphereBase {
     }
 
     /**
-     * Whether Project Atmosphere's snapshot at {@code pos}, read next, will already carry Destroy's
-     * warming: the pollution part is on and either the region has been simulated (its live
-     * temperature has left its creation value, so the scheduler has been pulling it onto a base that
-     * includes the warming) or there is no region yet (the snapshot then comes from the forecast, to
-     * which the hook adds it). The unified provider adds the warming itself only when this is false,
-     * so it is counted once.
+     * Project Atmosphere's scheduler has just moved {@code state}'s live temperature (one update in
+     * {@code AtmosphericUpdateScheduler.applyDeltas}): advance the estimate of how much of Destroy's
+     * warming the region holds by the same fraction the update moved it toward its targets (ACTIVE or
+     * PASSIVE, plus Project Atmosphere's guard for a deviation over 6 &deg;C), and note an ACTIVE update.
+     * A region Project Atmosphere replaced starts again from nothing.
      */
-    public static boolean liveReadingCarriesPollution(ServerLevel level, BlockPos pos) {
+    public static void onScheduledUpdate(Object state) {
         try {
-            if (!pollutionActive(level))
-                return false;
-            RegionAtmosphereState state = AtmosphericStateRegistry.getState(RegionInstanceKey.from(pos));
-            return state == null || state.getTemperature() != state.getBaseTemperature();
+            Context c = context();
+            if (c == null || !pollution(c))
+                return;
+            RegionAtmosphereState region = (RegionAtmosphereState) state;
+            RegionInstanceKey key = region.getRegionId();
+            if (key == null)
+                return;
+            boolean active = AtmosphericStateRegistry.getActiveStates().contains(key);
+            long now = c.overworld.getGameTime();
+            float target = c.pollution;
+            int identity = System.identityHashCode(region);
+            c.absorbed.compute(key, (k, old) -> {
+                float amount = old == null || old.state() != identity ? 0f : old.amount();
+                float deviation = target - amount;
+                float scale = active ? 1f : 0.35f;
+                float step = (active ? ABSORB_ACTIVE : ABSORB_PASSIVE) * deviation;
+                float excess = Math.abs(deviation) - 6f;
+                if (excess > 0f)
+                    step += Math.signum(deviation) * Math.min(3f, 0.15f * excess) * scale;
+                if (Math.abs(step) > Math.abs(deviation))
+                    step = deviation;
+                long lastActive = active ? now : old == null || old.state() != identity ? Long.MIN_VALUE : old.lastActive();
+                return new Absorbed(identity, amount + step, lastActive);
+            });
         } catch (Throwable t) {
             logOnce(t);
-            return false;
         }
+    }
+
+    /**
+     * What the unified value adds to Project Atmosphere's reading at {@code pos} for Destroy's warming,
+     * so that the warming is counted once and reaches machines the hybrid way (Ben, 2026-09-30):
+     *
+     * <ul>
+     *   <li>no region yet: 0, the reading comes from the forecast, to which the hook adds the warming;</li>
+     *   <li>a region Project Atmosphere never simulated (live still exactly its base): the full shift;</li>
+     *   <li>a region it is simulating (an ACTIVE update within {@link #SIMULATING_TICKS} ticks): 0, the
+     *       warming arrives at Project Atmosphere's own pace through its live temperature;</li>
+     *   <li>any other region (only PASSIVE updates, or none since the last player left): the shift less
+     *       what the live temperature already holds, so a change applies at once and the total is the
+     *       same as once Project Atmosphere has caught up.</li>
+     * </ul>
+     *
+     * <p>{@code null} when the pollution part is off: the provider then adds the whole shift itself, as
+     * Project Atmosphere carries none of it. A region first seen after a restart, already simulated, is
+     * taken to hold the current shift (its saved live temperature settled on it).
+     */
+    @Nullable
+    public static Float pollutionCorrection(ServerLevel level, BlockPos pos) {
+        try {
+            Context c = contextFor(level);
+            if (c == null || !pollution(c))
+                return null;
+            RegionInstanceKey key = RegionInstanceKey.from(pos);
+            RegionAtmosphereState state = AtmosphericStateRegistry.getState(key);
+            if (state == null)
+                return 0f;
+            float shift = c.pollution;
+            int identity = System.identityHashCode(state);
+            if (state.getTemperature() == state.getBaseTemperature()) {
+                c.absorbed.remove(key);
+                return shift;
+            }
+            Absorbed a = c.absorbed.compute(key, (k, old) ->
+                    old != null && old.state() == identity ? old : new Absorbed(identity, shift, Long.MIN_VALUE));
+            if (simulating(c, a))
+                return 0f;
+            return shift - a.amount();
+        } catch (Throwable t) {
+            logOnce(t);
+            return null;
+        }
+    }
+
+    /** Drops what is known about the region at {@code pos} (GameTests that put a region back as they found it). */
+    public static void forgetRegion(ServerLevel level, BlockPos pos) {
+        Context c = contextFor(level);
+        if (c != null)
+            c.absorbed.remove(RegionInstanceKey.from(pos));
+    }
+
+    /** Whether Project Atmosphere is simulating the region at {@code pos} in the hybrid's sense; for tests and the probe. */
+    public static boolean simulating(ServerLevel level, BlockPos pos) {
+        Context c = contextFor(level);
+        if (c == null)
+            return false;
+        RegionAtmosphereState state = AtmosphericStateRegistry.getState(RegionInstanceKey.from(pos));
+        Absorbed a = c.absorbed.get(RegionInstanceKey.from(pos));
+        return state != null && a != null && a.state() == System.identityHashCode(state) && simulating(c, a);
+    }
+
+    private static boolean simulating(Context c, Absorbed a) {
+        return a.lastActive() != Long.MIN_VALUE && c.overworld.getGameTime() - a.lastActive() <= SIMULATING_TICKS;
     }
 
     /**

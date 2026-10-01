@@ -171,4 +171,111 @@ public final class AtmosphereGameTests {
                 })
                 .thenSucceed();
     }
+
+    /**
+     * The hybrid (Ben, 2026-09-30): Destroy's warming reaches a machine at Project Atmosphere's own
+     * pace where Project Atmosphere is simulating the region (an ACTIVE update, the pass for regions
+     * near a player, within the last {@code SIMULATING_TICKS}), and at once everywhere else, with the
+     * same total.
+     *
+     * <p>No player can log in here (a mock player's login makes other mods send payloads its
+     * connection never negotiated), so this runs Project Atmosphere's own scheduler passes the way
+     * its level tick does with a player online: an ACTIVE pass over the test position's region every
+     * 20 ticks, a PASSIVE pass over every other region every 100. A second position 6000 blocks east
+     * is in a passively updated region: a remote factory. When the sky is saturated, the far machine's
+     * temperature rises by the whole shift on the tick the shift is published, while the near one
+     * reads Project Atmosphere's air and has not got all of it yet; a few hundred ticks later the near
+     * one has caught up and the far one is still up by the shift once, not twice.
+     *
+     * <p>Alone in its batch: it runs Project Atmosphere's simulation and saturates the level's pollution.
+     */
+    @GameTest(template = GameTests.TEMPLATE, timeoutTicks = 1600,
+              batch = "mic_climate_pollution_hybrid")
+    public static void pollutionReachesMachinesHybrid(GameTestHelper helper) {
+        if (GameTests.skipWithout(helper, Compat.PROJECT_ATMOSPHERE))
+            return;
+        if (GameTests.skipWithout(helper, Compat.DESTROY))
+            return;
+        runPollutionReachesMachinesHybrid(helper);
+    }
+
+    private static void runPollutionReachesMachinesHybrid(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos near = GameTests.centre(helper);
+        BlockPos far = near.offset(6000, 0, 0);
+        float[] before = new float[3];
+        float[] shift = new float[1];
+        boolean[] driving = {false};
+        long[] tick = {0};
+
+        // Project Atmosphere's level tick, with a player standing at `near`.
+        helper.onEachTick(() -> {
+            if (!driving[0])
+                return;
+            tick[0]++;
+            if (tick[0] % 20 == 0)
+                AtmosphereBaseTestBridge.schedulerPass(level, near, true);
+            if (tick[0] % 100 == 50)
+                AtmosphereBaseTestBridge.schedulerPass(level, near, false);
+        });
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    ClimateConfig.Test.pollutionMode(ClimateConfig.PollutionMode.MODIFIER);
+                    DestroyPollutionTestBridge.clearGreenhouse(level);
+                    // Ask about both places, so Project Atmosphere has a region at each.
+                    Climate.uncachedCelsius(level, near);
+                    Climate.uncachedCelsius(level, far);
+                    driving[0] = true;
+                })
+                .thenWaitUntil(() -> GameTests.assertTrue("Project Atmosphere actively simulates the region by the player",
+                        AtmosphereBaseTestBridge.simulating(level, near)))
+                .thenIdle(220)
+                .thenExecute(() -> {
+                    GameTests.assertTrue("Project Atmosphere does not actively simulate the far region",
+                            !AtmosphereBaseTestBridge.simulating(level, far));
+                    before[0] = Climate.uncachedCelsius(level, near);
+                    before[1] = Climate.uncachedCelsius(level, far);
+                    before[2] = AtmosphereBaseTestBridge.snapshot(level, far);
+                    GameTests.record("clean: unified near / far, Project Atmosphere far", before[0] + " / " + before[1] + " / " + before[2]);
+                    DestroyPollutionTestBridge.saturateGreenhouse(level);
+                })
+                .thenWaitUntil(() -> GameTests.assertAtLeast("the hook publishes Destroy's shift",
+                        AtmosphereBaseTestBridge.pollutionShift(level), 1.0))
+                .thenExecute(() -> {
+                    shift[0] = AtmosphereBaseTestBridge.pollutionShift(level);
+                    float near1 = Climate.uncachedCelsius(level, near);
+                    float far1 = Climate.uncachedCelsius(level, far);
+                    float paNear = AtmosphereBaseTestBridge.snapshot(level, near);
+                    float paFar = AtmosphereBaseTestBridge.snapshot(level, far);
+                    GameTests.record("shift published: shift, unified near / far, Project Atmosphere near / far",
+                            shift[0] + ", " + near1 + " / " + far1 + ", " + paNear + " / " + paFar);
+                    GameTests.assertNear("far from the player the machine gets the whole shift at once",
+                            far1 - before[1], shift[0], 0.75);
+                    GameTests.assertNear("by the player the machine reads Project Atmosphere's air", near1, paNear, 0.05);
+                    GameTests.assertTrue("by the player it has not got all of it yet (Project Atmosphere's pace)",
+                            near1 - before[0] < shift[0] - 1f);
+                })
+                .thenIdle(400)
+                .thenExecute(() -> {
+                    float near2 = Climate.uncachedCelsius(level, near);
+                    float far2 = Climate.uncachedCelsius(level, far);
+                    GameTests.record("400 ticks later: unified near / far, Project Atmosphere far",
+                            near2 + " / " + far2 + " / " + AtmosphereBaseTestBridge.snapshot(level, far));
+                    GameTests.assertNear("by the player Project Atmosphere has caught up", near2 - before[0], shift[0], 2.5);
+                    GameTests.assertNear("far away it is still the shift once, not twice", far2 - before[1], shift[0], 2.0);
+                })
+                .thenExecute(() -> driving[0] = false)
+                // Let any scheduler pass still in flight land before putting the regions back.
+                .thenIdle(40)
+                .thenExecute(() -> {
+                    AtmosphereBaseTestBridge.clearActiveSet();
+                    AtmosphereBaseTestBridge.resetRegion(level, near);
+                    AtmosphereBaseTestBridge.resetRegion(level, far);
+                    DestroyPollutionTestBridge.clearGreenhouse(level);
+                    ClimateConfig.Test.clear();
+                    Climate.invalidate(level);
+                })
+                .thenSucceed();
+    }
 }

@@ -38,17 +38,47 @@ except where Project Atmosphere's reading already carries it: when the region ha
 there is no region yet and the reading comes from the forecast. It decides this before reading,
 because reading can create the region. The GameTest checks both states.
 
-**The air warms at Project Atmosphere's pace.** The forecast-built readings and the region's
-seasonal base move by the full shift at once. The live temperature, which the snapshot and the
-unified value read once a region has simulated, follows as Project Atmosphere's scheduler pulls it
-up:
+**How the warming reaches machines: hybrid** (Ben, 2026-09-30, "Hybrid (Recommended)"). The
+forecast-built readings and a region's seasonal base move by the full shift at once. The live
+temperature follows as Project Atmosphere's scheduler pulls it up: seconds near a player, minutes
+elsewhere, not at all while nothing drives the simulation. For machines, players and chemistry
+(the unified value), `ProjectAtmosphereBase.pollutionCorrection` decides how the warming arrives:
 
-- seconds in regions near a player;
-- minutes elsewhere, about 85-90 % of the shift after 3600 ticks of passive updates;
-- not at all while no player is online and nothing drives the simulation.
+- **Where Project Atmosphere is simulating the region:** at its own pace, through its live
+  temperature. The unified value reads the air.
+- **Everywhere else:** at once. The unified value is Project Atmosphere's reading plus the shift,
+  less what the region's live temperature already holds.
 
-Before, `MODIFIER` added the warming to machines instantly. It is now counted once through the
-air, so machines lag with it.
+The total is the same either way, and the warming is counted once.
+
+**"Simulating" means:** the region got an ACTIVE update from Project Atmosphere's scheduler within
+the last 60 ticks (`SIMULATING_TICKS`). ACTIVE is the 20-tick pass over regions within 1000 blocks
+of a player. Everything else counts as not simulating:
+
+- a region never created (the reading comes from the forecast, to which the hook adds the shift);
+- a region never simulated (its live temperature is still exactly its base);
+- a region with only PASSIVE updates (the 100-tick, 35 %-strength batch over the rest of the
+  world, which takes minutes to follow a change);
+- a region with no updates since the last player left.
+
+Why ACTIVE updates within 60 ticks: that is the distinction Ben drew, near a player against remote
+factories with no player driving them. A recency test alone would count passively updated remote
+regions as simulated and leave them at the slow passive pace. Active-set membership alone goes stale
+when the last player leaves, because Project Atmosphere stops rebuilding the set. Sixty ticks is
+three active passes, so one late callback does not flip a region.
+
+**What the live temperature holds.** `onScheduledUpdate`, fed by a mixin around the
+`adjustTemperature` call in `AtmosphericUpdateScheduler.applyDeltas`, moves a per-region estimate
+toward the current shift by the fraction each update moves the region toward a step in its
+targets. The fractions come from Project Atmosphere's constants:
+
+- ACTIVE: 1 × (0.6 blend + 0.04 restore) + 0.0012 relax = 0.64;
+- PASSIVE: 0.35 × (0.45 + 0.04) + 0.00035 = 0.17;
+- plus its guard for a deviation over 6 °C.
+
+A state Project Atmosphere replaces starts again from nothing. A region first seen after a restart,
+already simulated, is taken to hold the current shift. The seasonal drift's slow
+`adjustTemperature` every 200 ticks is not counted, which makes the estimate slightly low.
 
 **Retired.** `PollutionAtmosphereEffect` is gone. `pollution.mode` and
 `pollution.atmosphereIntervalTicks` still load, so existing files keep working. Both mode values now

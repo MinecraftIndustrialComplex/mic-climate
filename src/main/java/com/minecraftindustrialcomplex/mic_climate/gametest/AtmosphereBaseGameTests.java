@@ -53,6 +53,7 @@ public final class AtmosphereBaseGameTests {
         int client = AtmosphereBaseTestBridge.boundClientTargets();
         GameTests.record("client-table targets bound", client + "/2");
         GameTests.assertTrue("both client-table mixins applied", client == 2);
+        GameTests.assertTrue("the hybrid's scheduler mixin applied", AtmosphereBaseTestBridge.schedulerBound());
         helper.succeed();
     }
 
