@@ -531,3 +531,19 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
     clean sky). Undriven they equal Deep Time exactly: Af 25.2, BWk 11.1 in northern summer and 23.2 in northern winter
     (southern hemisphere), Dfc 13.1 / −3.5, ET 1.4 / −21.8, EF 1.5 / −21.1. Driven, at midwinter noon: 27.1, 23.6,
     −2.7, −20.4, −19.5; at midnight: 23.6, 22.9, −4.3, −22.8, −22.7.
+- **2026-09-30 hybrid pollution for machines (branch `pa-pollution-hybrid`)** — Ben: "Hybrid (Recommended)". Where
+  Project Atmosphere is simulating a region, Destroy's warming reaches the unified value (machines) at Project
+  Atmosphere's pace through its air; everywhere else a change applies at once, with the same total, counted once.
+  "Simulating" = an ACTIVE scheduler update (its 20-tick pass over regions within 1000 blocks of a player) within 60
+  ticks; a mixin around `adjustTemperature` in `AtmosphericUpdateScheduler.applyDeltas` (gated on Destroy) tracks
+  that and how much of the warming each region's live temperature holds (design: phase-09 plan, "How the warming
+  reaches machines").
+  - **GameTests** 25/25 in all four PA × Destroy runtimes. `pollutionReachesMachinesHybrid` (Project Atmosphere's own
+    scheduler passes driven, an ACTIVE pass over the test region, PASSIVE over the rest; a second position 6000 blocks
+    east): clean unified near / far 5.71 / 4.66; the tick the +20.0 shift is published, far 24.84 (+20.18, at once,
+    while Project Atmosphere's air there was 4.84) and near 5.73 = Project Atmosphere's air (its pace); 400 ticks
+    later near +20.32 (caught up) and far +20.43 (once, not twice).
+  - **Pack smoke** 22/22.
+  - **Normal-world demo** (no player, Project Atmosphere driven, so every region is passive), °C (PA air / unified):
+    clean 11.61 / 11.61; polluted +20 before Project Atmosphere moved 11.61 / 31.61; driven 1200 ticks 30.07 / 31.83;
+    2400 more 31.97 / 31.99; sky cleared and driven 1200 ticks 13.87 / 11.75.
