@@ -31,12 +31,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *       config allows it;</li>
  *   <li>otherwise a biome-and-season estimate built to sit on the same scale
  *       ({@link BiomeSeasonFallback});</li>
- *   <li>plus Destroy's pollution warming, added exactly once, here at the
- *       source, so that no consumer downstream has to know pollution exists
- *       ({@link DestroyPollutionShift}) — unless step 1's live reading already
- *       carries it (Project Atmosphere's own temperature includes the warming
- *       through {@code pollution.projectAtmosphere} once its region has
- *       simulated), so it is never counted twice.</li>
+ *   <li>plus Destroy's pollution warming, exactly once, so that no consumer
+ *       downstream has to know pollution exists ({@link DestroyPollutionShift}).
+ *       Project Atmosphere carries the warming itself
+ *       ({@code pollution.projectAtmosphere}); where it is simulating a region
+ *       the warming reaches this value at its pace through its reading, and
+ *       elsewhere (only passive updates, no player, never simulated) a change
+ *       applies at once: the hybrid rule of
+ *       {@code atmosphere.ProjectAtmosphereBase#pollutionCorrection}.</li>
  * </ol>
  *
  * <p>Steps 1 and 3 touch optional mods, so each is reached only behind a
@@ -83,12 +85,20 @@ public final class UnifiedEnvironmentProvider implements EnvironmentProvider {
         if (ClimateConfig.deepTimeEnabled() && Compat.isLoaded(Compat.DEEP_TIME)) {
             DeepTimeTemperature dt = deepTime(world, pos, source);
             if (dt != null) {
-                // The weather anomaly is live minus seasonal base, and with pollution inside Project
-                // Atmosphere both carry the warming equally, so it is never in dt: add it once here.
+                // Destroy's warming, once. With pollution inside Project Atmosphere the region's seasonal
+                // base carries the whole shift and its live temperature only what it has taken up, so the
+                // weather anomaly (live minus base) holds "taken up - shift": adding the shift leaves
+                // Project Atmosphere's pace, and the hybrid correction makes it at once where Project
+                // Atmosphere is not simulating the region. No anomaly (unsimulated region): just the shift.
                 float celsius = dt.celsius();
                 if (this.pollution && Compat.isLoaded(Compat.DESTROY)) {
                     warnRetiredMode();
                     celsius += DestroyPollutionShift.shift(world);
+                    if (dt.withWeather() && Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)) {
+                        Float correction = ProjectAtmosphereSource.pollutionCorrection(world, pos);
+                        if (correction != null)
+                            celsius += correction;
+                    }
                 }
                 builder.set(EnvironmentComponentTypes.TEMPERATURE, new TemperatureRecord(celsius, TemperatureUnit.CELSIUS));
                 return;
@@ -96,12 +106,14 @@ public final class UnifiedEnvironmentProvider implements EnvironmentProvider {
         }
 
         Float celsius = null;
-        boolean carriesPollution = false;
+        Float pollutionCorrection = null;
         if (source != ClimateConfig.Source.THERMOO && Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)) {
             // Asked before the reading: which of Project Atmosphere's paths answers depends on whether
             // the region exists yet, and reading it can create the region.
-            carriesPollution = ProjectAtmosphereSource.readingCarriesPollution(world, pos);
+            pollutionCorrection = ProjectAtmosphereSource.pollutionCorrection(world, pos);
             celsius = ProjectAtmosphereSource.celsius(world, pos, biome);
+            if (celsius == null)
+                pollutionCorrection = null;
         }
 
         if (celsius == null && source == ClimateConfig.Source.PROJECT_ATMOSPHERE
@@ -117,8 +129,9 @@ public final class UnifiedEnvironmentProvider implements EnvironmentProvider {
 
         if (this.pollution && Compat.isLoaded(Compat.DESTROY)) {
             warnRetiredMode();
-            if (!carriesPollution)
-                celsius += DestroyPollutionShift.shift(world);
+            // Project Atmosphere's reading with the hybrid correction, or the whole shift where Project
+            // Atmosphere carries none of it (pollution part off, not installed, or the biome fallback).
+            celsius += pollutionCorrection != null ? pollutionCorrection : DestroyPollutionShift.shift(world);
         }
 
         builder.set(

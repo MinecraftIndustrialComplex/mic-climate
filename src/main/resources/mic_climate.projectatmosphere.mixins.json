@@ -11,7 +11,8 @@
     "LocalBiomeTemperatureResolverMixin",
     "CropStressManagerMixin",
     "ForecastGeneratorMixin",
-    "SeasonHooksPrecipitationMixin"
+    "SeasonHooksPrecipitationMixin",
+    "AtmosphericUpdateSchedulerMixin"
   ],
   "injectors": {
     "defaultRequire": 0

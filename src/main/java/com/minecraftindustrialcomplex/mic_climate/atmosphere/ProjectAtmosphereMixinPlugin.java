@@ -63,6 +63,7 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
     /** Mixins that serve Deep Time only, and the ones that serve Deep Time or Destroy. */
     private static final List<String> FOR_DEEP_TIME = List.of(DEEP_TIME_MOD);
     private static final List<String> FOR_DEEP_TIME_OR_DESTROY = List.of(DEEP_TIME_MOD, DESTROY_MOD);
+    private static final List<String> FOR_DESTROY = List.of(DESTROY_MOD);
     private static final String MIXIN_PACKAGE = "com.minecraftindustrialcomplex.mic_climate.mixin.projectatmosphere.";
 
     private static final String PA = "net/Gabou/projectatmosphere/";
@@ -92,6 +93,8 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
             "(Lnet/minecraft/server/level/ServerPlayer;Ljava/util/Map;)V");
     private static final Method COMPUTE_AVERAGES = new Method("computeAverageForecastsByBiomeType", "()V");
     private static final String PAYLOAD = "Lnet/minecraft/network/protocol/common/custom/CustomPacketPayload;";
+    private static final Method APPLY_DELTAS = new Method("applyDeltas",
+            "(Ljava/util/List;JLjava/lang/String;L" + PA + "modules/atmosphere/AtmosphericUpdateScheduler$UpdateMode;)V");
 
     private static final Map<String, Needs> NEEDS = Map.of(
             "RegionAtmosphereStateMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
@@ -122,6 +125,9 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
                     List.of(SEND_TO_PLAYER, COMPUTE_AVERAGES),
                     List.of(new Call(COMPUTE_AVERAGES, "net/neoforged/neoforge/network/PacketDistributor", "sendToAllPlayers",
                             "(" + PAYLOAD + "[" + PAYLOAD + ")V"))),
+            "AtmosphericUpdateSchedulerMixin", new Needs(PA_MOD, FOR_DESTROY,
+                    List.of(APPLY_DELTAS),
+                    List.of(new Call(APPLY_DELTAS, PA + "modules/atmosphere/RegionAtmosphereState", "adjustTemperature", "(F)V"))),
             "SeasonHooksPrecipitationMixin", new Needs(SERENE_SEASONS_MOD, FOR_DEEP_TIME,
                     List.of(new Method("getPrecipitationAtSeasonal",
                             "(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/Holder;" + BLOCK_POS

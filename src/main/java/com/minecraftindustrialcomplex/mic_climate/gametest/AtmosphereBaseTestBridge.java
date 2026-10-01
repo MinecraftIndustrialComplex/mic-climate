@@ -125,6 +125,66 @@ final class AtmosphereBaseTestBridge {
         return n;
     }
 
+    /** Whether the hybrid's scheduler mixin reached Project Atmosphere's AtmosphericUpdateScheduler. */
+    static boolean schedulerBound() {
+        try {
+            return ProjectAtmosphereHooked.class.isAssignableFrom(
+                    Class.forName("net.Gabou.projectatmosphere.modules.atmosphere.AtmosphericUpdateScheduler"));
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+
+    /** Whether Project Atmosphere is actively simulating the region at {@code pos} (the hybrid's test). */
+    static boolean simulating(ServerLevel level, BlockPos pos) {
+        return ProjectAtmosphereBase.simulating(level, pos);
+    }
+
+    /**
+     * Runs one of Project Atmosphere's own scheduler passes, as its level tick does while a player is
+     * online: ACTIVE over {@code activeAround}'s region (which is put in its active set first), or
+     * PASSIVE over every other region. They are private, so this goes through reflection; test code
+     * only, against the Project Atmosphere version the hooks were checked on.
+     */
+    static void schedulerPass(ServerLevel level, BlockPos activeAround, boolean active) {
+        try {
+            java.util.Set<RegionInstanceKey> keys = java.util.Set.of(RegionInstanceKey.from(activeAround));
+            AtmosphericStateRegistry.replaceActiveStates(keys);
+            Class<?> scheduler = Class.forName("net.Gabou.projectatmosphere.modules.atmosphere.AtmosphericUpdateScheduler");
+            java.lang.reflect.Method pass = active
+                    ? scheduler.getDeclaredMethod("scheduleActive", ServerLevel.class, java.util.Set.class)
+                    : scheduler.getDeclaredMethod("schedulePassive", ServerLevel.class);
+            pass.setAccessible(true);
+            if (active)
+                pass.invoke(null, level, keys);
+            else
+                pass.invoke(null, level);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Project Atmosphere's scheduler passes are not reachable", e);
+        }
+    }
+
+    /**
+     * Puts the region at {@code pos} back the way a fresh test world has it: its live temperature at
+     * its base (never simulated) and nothing recorded about it, so later tests see an untouched region.
+     */
+    static void resetRegion(ServerLevel level, BlockPos pos) {
+        RegionAtmosphereState state = AtmosphericStateRegistry.getState(RegionInstanceKey.from(pos));
+        if (state != null)
+            state.setTemperature(state.getBaseTemperature());
+        ProjectAtmosphereBase.forgetRegion(level, pos);
+    }
+
+    /** Empties Project Atmosphere's active set again after {@link #schedulerPass}. */
+    static void clearActiveSet() {
+        AtmosphericStateRegistry.replaceActiveStates(java.util.Set.of());
+    }
+
+    /** Project Atmosphere's snapshot temperature at {@code pos} (its live air). */
+    static float snapshot(ServerLevel level, BlockPos pos) {
+        return AtmoApi.getInstance().getCurrentWeather(level, pos).temperatureC();
+    }
+
     /** The client's rain-or-snow rule for a table value, and what the hook does on a server level. */
     static String precipitationRule(ServerLevel level, BlockPos pos) {
         var biome = level.getBiome(pos);
