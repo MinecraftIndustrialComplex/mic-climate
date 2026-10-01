@@ -545,3 +545,17 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
     with the new checks (API 2, the synthetic planet's C = 1024 from the generator, 0 elsewhere, latitude); the one
     failure, `climateConsistent` (Köppen families below their floor on the baked test planet), touches no code the
     branch changed.
+- **2026-09-30 phase 9 follow-up** (Ben's answers; `seasons` stays unmerged): crops grow year-round in the
+  seasonless band (≤ 1/12 strength, about 7.9°), tropical biomes there included; the tropical wet/dry cycle keeps
+  its own band (0 within 5°, full 10–20°, 0 beyond 25°, inverted south) for Serene Seasons' tropical colours and
+  Project Atmosphere's wet/dry stage (7.5–22.5°); `deepTime.hemisphereSeasons` and `deepTime.fullSeasonLatitude`
+  moved to the world's server config (synced to clients), no longer tied to `deepTime.enabled`.
+  - GameTests 29/29 with and without Project Atmosphere; pack smoke 20/20 (not applied without Deep Time).
+  - Planet probe (same preset, Deep Time `climate-latitude-api`, today's pack 790e116): every server injector
+    landed, the new fertility ones included. At the equator (`bamboo_jungle`, `tropical_jungle`, both Serene
+    Seasons tropical biomes) wheat and carrots grow in northern midwinter and midsummer alike; at 15 N (tropical
+    strength 1) `savanna` keeps Serene Seasons' tropical crop rule (wheat, not carrots) and Project Atmosphere's
+    wet/dry stage (WET in the level's midwinter, DRY in its midsummer, Serene Seasons' own tropical calendar),
+    while temperate biomes there are in Late Spring (carrots grow) in midwinter; 45 S (`taiga`, `lush_valley`)
+    is in summer during the northern winter and in winter during the northern summer, and reads Mid Winter with
+    the switch off.
