@@ -56,6 +56,26 @@ public final class DeepTimeGameTests {
         helper.succeed();
     }
 
+    /**
+     * The unified provider covers {@code #mic_climate:overworld}: all of {@code #minecraft:is_overworld}
+     * plus the Terralith biomes that tag misses (Deep Time places {@code terralith:deep_warm_ocean};
+     * without this, Thermoo answered its 20 C default there). The Terralith entries are optional, so
+     * the tag also loads in this runtime, which has no Terralith.
+     */
+    @GameTest(template = GameTests.TEMPLATE, timeoutTicks = 100)
+    public static void providerCoversTheWholeOverworld(GameTestHelper helper) {
+        var biomes = helper.getLevel().registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
+        var ours = net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.BIOME, MicClimate.asResource("overworld"));
+        var vanilla = net.minecraft.tags.BiomeTags.IS_OVERWORLD;
+        GameTests.assertTrue("#mic_climate:overworld loaded", biomes.getTag(ours).isPresent());
+        long missing = biomes.getTag(vanilla).map(set -> set.stream().filter(b -> !b.is(ours)).count()).orElse(-1L);
+        GameTests.record("#minecraft:is_overworld biomes outside #mic_climate:overworld", missing);
+        GameTests.assertTrue("every #minecraft:is_overworld biome is covered", missing == 0);
+        GameTests.assertTrue("plains is covered",
+                biomes.getHolderOrThrow(net.minecraft.world.level.biome.Biomes.PLAINS).is(ours));
+        helper.succeed();
+    }
+
     /** Outside a Deep Time world the coupling is invisible: the same number with it on or off. */
     @GameTest(template = GameTests.TEMPLATE, timeoutTicks = 200)
     public static void otherWorldsAreUnchanged(GameTestHelper helper) {

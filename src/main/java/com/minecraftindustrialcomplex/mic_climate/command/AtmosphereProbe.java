@@ -1,7 +1,6 @@
 package com.minecraftindustrialcomplex.mic_climate.command;
 
 import com.minecraftindustrialcomplex.mic_climate.Compat;
-import com.minecraftindustrialcomplex.mic_climate.atmosphere.PollutionAtmosphereEffect;
 import com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereBase;
 import com.minecraftindustrialcomplex.mic_climate.config.ClimateConfig;
 import net.Gabou.projectatmosphere.api.AtmoApi;
@@ -23,16 +22,14 @@ import java.util.Locale;
  *
  * <p>Three things on one line, because they are only meaningful together:
  * Project Atmosphere's own answer at this position, the region key it belongs
- * to, and how much of a pollution offset {@code pollution.mode = ATMOSPHERE}
- * believes it is currently holding in that region. Without the last of those,
- * "the atmosphere line went up" cannot be told apart from "we pushed it up",
- * which is the whole question that mode raises.
+ * to, and how much of Destroy's warming the pollution hook is putting inside
+ * Project Atmosphere's temperature ({@code pollution.projectAtmosphere}).
  *
- * <p>The {@code pa-base} line reports the one place this mod does mix into
- * Project Atmosphere, the optional Deep Time base hook
- * ({@code atmosphere.ProjectAtmosphereBase}): whether its mixins bound, whether
- * it is active here, the region's seasonal base with and without it, and the
- * two per-block temperatures Project Atmosphere decides weather by.
+ * <p>The {@code pa-base} line reports the hooks into Project Atmosphere
+ * ({@code atmosphere.ProjectAtmosphereBase}): whether their mixins bound,
+ * whether the Deep Time part is active here, the region's seasonal base with
+ * and without it, and the two per-block temperatures Project Atmosphere decides
+ * weather by.
  */
 final class AtmosphereProbe {
 
@@ -44,21 +41,24 @@ final class AtmosphereProbe {
             return ClimateCommands.line("atmosphere", "-", "(AtmoApi.getCurrentWeather returned nothing)");
 
         RegionInstanceKey key = RegionInstanceKey.from(pos);
-        float applied = PollutionAtmosphereEffect.appliedOffset(key);
+        float pollution = ProjectAtmosphereBase.pollutionShift(level);
 
         return ClimateCommands.line(
                 "atmosphere",
                 ClimateCommands.celsius(snapshot.temperatureC()),
                 String.format(
                         Locale.ROOT,
-                        "(AtmoApi.getCurrentWeather)  region (%d, %d)  applied offset %+.2f",
-                        key.regionX(), key.regionZ(), applied));
+                        "(AtmoApi.getCurrentWeather)  region (%d, %d)  pollution inside %+.2f%s",
+                        key.regionX(), key.regionZ(), pollution,
+                        ProjectAtmosphereBase.pollutionActive(level) ? "" : " (pollution part off)"));
     }
 
     /**
-     * {@code pa-base : <snow/freeze C> (hook: active|off (why), bound n/5; region base DT x vs PA y;
-     * rain-or-snow z C; snow here yes|no)}. The value column is the temperature Project Atmosphere
-     * freezes water and lays snow by at this block, hooked or not.
+     * {@code pa-base : <snow/freeze C> (hook: active|off (why), bound n/5; pollution inside p; region
+     * seasonal base x vs PA's own y ..., live z; rain-or-snow w C; snow here yes|no)}. The value
+     * column is the temperature Project Atmosphere freezes water and lays snow by at this block,
+     * hooked or not; the region's seasonal base is what its state reports now (with whichever hook
+     * parts are on), against Project Atmosphere's own base plus its global season offset.
      */
     static String baseLine(ServerLevel level, BlockPos pos) {
         int bound = ProjectAtmosphereBase.boundTargets();
@@ -79,9 +79,8 @@ final class AtmosphereProbe {
             region = "no live region";
         } else {
             float own = state.getBaseTemperature() + SeasonalAtmosphericDrift.currentTemperatureOffsetC();
-            float dt = ProjectAtmosphereBase.regionBase(level, pos);
-            region = String.format(Locale.ROOT, "region seasonal base %s vs PA's own %.2f (base %.2f %+.2f season), live %.2f",
-                    Float.isNaN(dt) ? "-" : String.format(Locale.ROOT, "%.2f", dt), own, state.getBaseTemperature(),
+            region = String.format(Locale.ROOT, "region seasonal base %.2f vs PA's own %.2f (base %.2f %+.2f season), live %.2f",
+                    state.getEffectiveBaseTemperature(), own, state.getBaseTemperature(),
                     SeasonalAtmosphericDrift.currentTemperatureOffsetC(), state.getTemperature());
         }
         float local = (float) LocalBiomeTemperatureResolver.getLocalBiomeTemperature(level, pos, key, null);
@@ -90,7 +89,8 @@ final class AtmosphereProbe {
         return ClimateCommands.line(
                 "pa-base",
                 ClimateCommands.celsius(local),
-                String.format(Locale.ROOT, "(snow/freeze temperature; hook %s, bound %d/5; %s; rain-or-snow %.2f C; snow here %s)",
-                        why, bound, region, precipitation, snow ? "yes" : "no"));
+                String.format(Locale.ROOT, "(snow/freeze temperature; hook %s, bound %d/5; pollution inside %+.2f; %s; "
+                                + "rain-or-snow %.2f C; snow here %s)",
+                        why, bound, ProjectAtmosphereBase.pollutionShift(level), region, precipitation, snow ? "yes" : "no"));
     }
 }

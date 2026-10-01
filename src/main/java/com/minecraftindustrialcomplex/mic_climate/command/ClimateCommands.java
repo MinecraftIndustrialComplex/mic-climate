@@ -38,7 +38,7 @@ import java.util.Locale;
  * /mic_climate probe [&lt;pos&gt;]      every source's answer at a position
  * /mic_climate invalidate         drop the per-chunk cache, so the next read is real
  * /mic_climate pollution &lt;0..1&gt;   set Destroy's greenhouse to a fraction of its maximum
- * /mic_climate mode [modifier|atmosphere|config]   read or set pollution.mode for this session
+ * /mic_climate mode [modifier|atmosphere|config]   read or set pollution.mode for this session (retired key)
  * /mic_climate atmosphere base [on|off|config]     read or set deepTime.projectAtmosphereBase for this session
  * </pre>
  *
@@ -172,9 +172,10 @@ public final class ClimateCommands {
 
         lines.add(String.format(
                 Locale.ROOT,
-                "config     : source=%s deepTime=%s pollution.mode=%s%s multiplier=%.2f cacheTicks=%d",
+                "config     : source=%s deepTime=%s pollution.projectAtmosphere=%s pollution.mode=%s%s multiplier=%.2f cacheTicks=%d",
                 ClimateConfig.source(),
                 ClimateConfig.deepTimeEnabled() ? (ClimateConfig.deepTimeWeather() ? "on+weather" : "on") : "off",
+                ClimateConfig.pollutionProjectAtmosphere() ? "on" : "off",
                 ClimateConfig.pollutionMode(),
                 ClimateConfig.pollutionModeOverride() == null ? "" : " (session override)",
                 ClimateConfig.pollutionMultiplier(),
@@ -247,9 +248,11 @@ public final class ClimateCommands {
         ClimateConfig.PollutionMode override = ClimateConfig.pollutionModeOverride();
         ctx.getSource().sendSuccess(() -> Component.literal(String.format(
                 Locale.ROOT,
-                "mic_climate: pollution.mode = %s (%s)",
+                "mic_climate: pollution.mode = %s (%s; retired: both values behave as MODIFIER, Project Atmosphere "
+                        + "gets the warming through pollution.projectAtmosphere = %s)",
                 ClimateConfig.pollutionMode(),
-                override == null ? "from mic_climate-common.toml" : "session override")), false);
+                override == null ? "from mic_climate-common.toml" : "session override",
+                ClimateConfig.pollutionProjectAtmosphere())), false);
         return 1;
     }
 

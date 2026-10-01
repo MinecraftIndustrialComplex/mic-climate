@@ -173,7 +173,8 @@ cannot answer), `pollution` (bool, default true).
 4. `builder.set(EnvironmentComponentTypes.TEMPERATURE, new TemperatureRecord(T, CELSIUS))`.
    Leave humidity to the base provider (or set from PA's snapshot when available — optional).
 
-Datapack: one `EnvironmentDefinition` for `#minecraft:is_overworld` at priority 2000 pointing at
+Datapack: one `EnvironmentDefinition` for `#mic_climate:overworld` (`#minecraft:is_overworld` plus the Terralith
+biomes that tag misses, added 2026-09-30) at priority 2000 pointing at
 `mic_climate:unified` with `base` = Thermoo's temperate-seasonal provider (check its id in
 Thermoo's own data). Nether/End keep Thermoo's defaults. No `neoforge:conditions` guard is needed on the definition:
 thermoo is a required dependency, so the datapack registry always exists.
@@ -282,8 +283,12 @@ Recommendation: move; the pack always ships both.
   or modified builds; credit it in the pack listing and in this mod's docs. Its public API only,
   with one exception Ben chose on 2026-09-30 ("Mixin anyway"): the optional Deep Time base hook
   (phase 8, `plans/phase-08-atmosphere-base.md`) mixes into five of its classes at runtime, in its
-  own config, only for Project Atmosphere versions it was checked against and only with Deep Time
-  installed. Its jar stays a `compileOnly` input in the gitignored `libs/`.
+  own config, only for Project Atmosphere versions it was checked against. Phase 9
+  (`plans/phase-09-atmosphere-client-and-pollution.md`, Ben 2026-09-30) adds Destroy's pollution
+  at the same sites in every world, so those mixins also apply with Destroy installed, plus its
+  forecast sender (the per-player Deep Time client table) and, in Serene Seasons, the client's
+  rain-or-snow answer. Its jar stays a `compileOnly` input in the gitignored `libs/`. Ben is
+  asking its author for consent on its Discord.
 - LSO all-rights-reserved: we compile against its `api`/`registry` classes (intended for
   integrations, and Project Atmosphere does the same). Do not ship any LSO code. Ask the author if
   publishing beyond the pack.
@@ -491,3 +496,38 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
   - Finding, not this phase's: at `terralith:deep_warm_ocean` (which Deep Time places) the unified provider does not
     answer and Thermoo returns its default 20.00 °C (the Af coordinate on the first pass), most likely because that
     biome is not in `#minecraft:is_overworld`, the tag `thermoo/environment/overworld.json` selects.
+- **2026-09-30 phase 9 (branch `pa-client`): Destroy's pollution inside Project Atmosphere, a per-player Deep Time
+  client table, Terralith coverage** — design in `plans/phase-09-atmosphere-client-and-pollution.md`. Ben's calls:
+  pollution into Project Atmosphere "in all worlds", "per-player cache", keep accepting 0.9.1.x.
+  - **GameTests** (Mac): 24/24 in all four runtimes: PA + Destroy (`-PwithAtmosphere`), PA alone (`-PwithAtmosphere
+    -PwithoutDestroy`), Destroy alone (default), neither (`-PwithoutDestroy`). With PA the five temperature mixins and
+    both client-table mixins bind (5/5, 2/2). Saturated sky (Destroy +20.0 K): Project Atmosphere's rain-or-snow and
+    snow/freeze temperatures and a region's seasonal base rise by 20.00 exactly with `pollution.projectAtmosphere` on
+    against off; an unsimulated region's snapshot does not move; the unified value is the snapshot + 20 while the
+    region is unsimulated and the snapshot alone once it has (25.28 both ways); the retired ATMOSPHERE mode gives the
+    MODIFIER value. The client table reads the stand-in climate for the biome at the test position; the client rule
+    gives SNOW/RAIN either side of 0 C and leaves the server's answer alone. Two Destroy tests now skip without Destroy
+    (they failed on a missing class; nothing had run the suite without Destroy before).
+  - **Pack smoke** (real pack from Deep Time's snapshot, flat world, no Deep Time): **22/22**, with step 5 rewritten:
+    a saturated sky raises Project Atmosphere's snow/freeze, rain-or-snow and region base by the shift, the retired
+    mode changes nothing, a clean sky puts everything back.
+  - **Pollution on a normal (non-flat, non-Deep-Time) MIC world**, Project Atmosphere driven headless, spawn region,
+    noon, °C (AtmoApi / snow-freeze / region seasonal base / unified): clean 13.41 / 8.27 / 8.23 / 13.41; polluted
+    +20 K and driven 1200 ticks 30.09 / 28.27 / 28.23 / 30.09; 2400 ticks later 31.83 / 28.27 / 28.22 / 31.83; sky
+    cleared and driven 1200 ticks 13.73 / 8.27 / 8.23 / 13.73. The forecast-built readings and the base jump by the
+    full shift and stay; the live reading converges on it and holds (no erosion); the unified value equals Project
+    Atmosphere's reading throughout, so the warming is counted once. A first pass showed Project Atmosphere's own lazy
+    region orchestrator regenerating a region (new forecast, live reset to base) on the first per-block question about
+    it; the demo now asks once before its baseline.
+  - **Real client on the Mac: not possible with this mod set.** Deep Time's Mac client runner
+    (`tools/client/mac-client.sh`, `-PrunSet` with Project Atmosphere, Serene Seasons (+Plus), Simple Clouds,
+    Gabou's Libs, Architectury, Thermoo and this branch's jar) got as far as mod loading, then Simple Clouds' and
+    Project Atmosphere's shaders failed to compile: they need GLSL 4.30 and macOS's OpenGL stops at 4.1
+    (`version '430' is not supported`), so NeoForge refused to continue. Neither mod can run on any macOS client, so
+    the on-screen rain/snow check needs a Linux or Windows client; the decision itself is covered by the GameTests.
+  - **Deep Time planet with this branch's jar** (Deep Time's `p1-25-probe.sh` from branch `p1-25-probe-sites`,
+    which scans for its land sites; it picked the same five as before): with the hook on, Project Atmosphere's AtmoApi,
+    rain-or-snow and snow/freeze readings equal the unified value to the hundredth in every phase (pollution 0 on a
+    clean sky). Undriven they equal Deep Time exactly: Af 25.2, BWk 11.1 in northern summer and 23.2 in northern winter
+    (southern hemisphere), Dfc 13.1 / −3.5, ET 1.4 / −21.8, EF 1.5 / −21.1. Driven, at midwinter noon: 27.1, 23.6,
+    −2.7, −20.4, −19.5; at midnight: 23.6, 22.9, −4.3, −22.8, −22.7.

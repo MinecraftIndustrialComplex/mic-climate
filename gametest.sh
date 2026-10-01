@@ -6,6 +6,8 @@
 #   ./gametest.sh -PwithAtmosphere run it with Project Atmosphere on the
 #                                  classpath and Serene Seasons Plus pinned down
 #                                  to 4.2.3 (see build.gradle for why)
+#   ./gametest.sh -PwithoutDestroy run it without Destroy (and mic-destroy-electric);
+#                                  combine with -PwithAtmosphere for Project Atmosphere alone
 #
 # Boots a dedicated NeoForge server with the pack's whole temperature graph on
 # the classpath, runs every @GameTest in the mic_climate namespace, and exits

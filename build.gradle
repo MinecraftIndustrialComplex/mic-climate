@@ -201,9 +201,12 @@ dependencies {
     localRuntime("maven.modrinth:formicapi:${formicapi_version}")
 
     // Destroy, from the same local build the compileOnly line uses, plus its
-    // Petrolpark library.
-    localRuntime(files("${project.projectDir}/../Destroy/a/b/c/build/libs/destroy-${minecraft_version}-${destroy_version}.jar"))
-    localRuntime("petrolpark:petrolpark-${minecraft_version}:${petrolpark_library_version}")
+    // Petrolpark library. -PwithoutDestroy leaves it (and the sibling addon that
+    // needs it) out, for the runs that check everything still works without it.
+    if (!project.hasProperty('withoutDestroy')) {
+        localRuntime(files("${project.projectDir}/../Destroy/a/b/c/build/libs/destroy-${minecraft_version}-${destroy_version}.jar"))
+        localRuntime("petrolpark:petrolpark-${minecraft_version}:${petrolpark_library_version}")
+    }
 
     // The survival mod the LSO bridge registers its modifiers on.
     localRuntime("maven.modrinth:legendary-survival-overhaul:${lso_version}")
@@ -256,7 +259,8 @@ dependencies {
 
     // The sibling addon, so Destroy's Vat carries a Power Grid ThermalBehaviour
     // at runtime -- which is what vatThermalBehaviourVisible asserts.
-    localRuntime(files("${project.projectDir}/../mic-destroy-electric/build/libs/mic_destroy_electric-${minecraft_version}-${mic_destroy_electric_version}.jar"))
+    if (!project.hasProperty('withoutDestroy'))
+        localRuntime(files("${project.projectDir}/../mic-destroy-electric/build/libs/mic_destroy_electric-${minecraft_version}-${mic_destroy_electric_version}.jar"))
 }
 
 var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {

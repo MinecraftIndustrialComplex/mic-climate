@@ -34,14 +34,17 @@ public final class ClimateConfig {
         THERMOO
     }
 
-    /** How Destroy's pollution-driven warming enters the world. */
+    /**
+     * {@code pollution.mode}, kept so existing config files load. Both values now behave the same:
+     * the unified value always adds Destroy's warming itself ({@code MODIFIER}), and Project
+     * Atmosphere gets it through {@code pollution.projectAtmosphere} instead of the old eroding push.
+     */
     public enum PollutionMode {
-        /** Added to the unified value inside our environment provider. */
+        /** The unified value adds Destroy's warming. */
         MODIFIER,
         /**
-         * Pushed into Project Atmosphere's own regional state, so that its
-         * forecasts and every other consumer of it see the warming too.
-         * Experimental: see {@code atmosphere.PollutionAtmosphereEffect}.
+         * Retired 2026-09-30. Used to push the warming into Project Atmosphere's regional state
+         * through its public API, where it eroded; now read as {@link #MODIFIER}, with one warning.
          */
         ATMOSPHERE
     }
@@ -53,12 +56,14 @@ public final class ClimateConfig {
     private static ModConfigSpec.EnumValue<PollutionMode> POLLUTION_MODE;
     private static ModConfigSpec.IntValue POLLUTION_ATMOSPHERE_INTERVAL_TICKS;
     private static ModConfigSpec.DoubleValue POLLUTION_MULTIPLIER;
+    private static ModConfigSpec.BooleanValue POLLUTION_PA;
     private static final Map<ThermooSeason, ModConfigSpec.DoubleValue> SEASON_OFFSETS =
             new EnumMap<>(ThermooSeason.class);
     private static ModConfigSpec.BooleanValue DEEP_TIME_ENABLED;
     private static ModConfigSpec.BooleanValue DEEP_TIME_WEATHER;
     private static ModConfigSpec.DoubleValue DEEP_TIME_MAX_ANOMALY;
     private static ModConfigSpec.BooleanValue DEEP_TIME_PA_BASE;
+    private static ModConfigSpec.BooleanValue DEEP_TIME_PA_CLIENT;
     private static ModConfigSpec.BooleanValue POWERGRID_ENABLED;
     private static ModConfigSpec.BooleanValue DESTROY_ENABLED;
     private static ModConfigSpec.BooleanValue LSO_ENABLED;
@@ -95,30 +100,25 @@ public final class ClimateConfig {
                     .push("pollution");
 
             builder.comment(
-                    "MODIFIER adds Destroy's greenhouse/ozone warming to the unified temperature at its source,",
-                    "so every consumer sees it exactly once.",
-                    "ATMOSPHERE instead pushes the warming into Project Atmosphere's own regional state, so that",
-                    "its forecasts, its displays and everything else reading it are warmed too, and the pack's",
-                    "temperature picks the warming back up from there instead of adding it separately. Needs both",
-                    "Project Atmosphere and Destroy; without Project Atmosphere it falls back to MODIFIER.",
-                    "This mode is experimental. Project Atmosphere erodes any temperature written from outside,",
-                    "pulling the region back toward where its own simulation says it belongs, so the offset has to",
-                    "be topped up on a timer, and the top-up cannot tell natural weather drift apart from erosion",
-                    "of the offset: it charges everything the region moved to the offset first. It never stacks and",
-                    "it unwinds when pollution clears, but the value it holds is an estimate, not an exact figure."
+                    "Put Destroy's greenhouse/ozone warming inside Project Atmosphere's own temperature, in every",
+                    "world: its regions' seasonal base (so their targets, day/night band and live temperature), its",
+                    "snow and freeze temperature, its rain-or-snow temperature and its readings all warm with the",
+                    "sky, and nothing erodes it, because it is part of the base Project Atmosphere relaxes toward.",
+                    "This mixes into Project Atmosphere's internals; the mixins are only applied to versions they were",
+                    "checked against and skip themselves with a log line otherwise. Needs Project Atmosphere and",
+                    "Destroy. The unified value (machines, players, chemistry) adds the warming once either way."
+            );
+            POLLUTION_PA = builder.define("projectAtmosphere", true);
+
+            builder.comment(
+                    "RETIRED 2026-09-30, kept so existing files load. MODIFIER and ATMOSPHERE now behave the same:",
+                    "the unified value adds Destroy's warming itself, and Project Atmosphere gets it through",
+                    "pollution.projectAtmosphere above. ATMOSPHERE used to push the warming into Project Atmosphere",
+                    "through its public API, where Project Atmosphere eroded it; setting it now logs one warning."
             );
             POLLUTION_MODE = builder.defineEnum("mode", PollutionMode.MODIFIER);
 
-            builder.comment(
-                    "How often, in ticks, ATMOSPHERE mode tops the pollution offset back up in each region",
-                    "Project Atmosphere is actively simulating. Does nothing in MODIFIER mode.",
-                    "Project Atmosphere moves active regions 60 percent of the way toward their own target every",
-                    "20 ticks, which is also how fast it erodes the offset, so this interval decides what the",
-                    "warming actually feels like: at 20 the region stays between the full offset and about 40",
-                    "percent of it, while at the default 100 the offset has mostly decayed again before the next",
-                    "pass restores it, giving a repeating rise and fall rather than a steady warmer world.",
-                    "Lower it toward 20 for a warming that holds; raise it to make the push cheaper and gentler."
-            );
+            builder.comment("RETIRED 2026-09-30 with pollution.mode = ATMOSPHERE; read by nothing, kept so existing files load.");
             POLLUTION_ATMOSPHERE_INTERVAL_TICKS = builder.defineInRange("atmosphereIntervalTicks", 100, 20, 1200);
 
             builder.comment(
@@ -185,6 +185,15 @@ public final class ClimateConfig {
                     "line otherwise. Needs deepTime.enabled. Worlds Deep Time did not generate are not affected."
             );
             DEEP_TIME_PA_BASE = builder.define("projectAtmosphereBase", true);
+
+            builder.comment(
+                    "In a Deep Time world, send each player a Deep Time version of Project Atmosphere's client",
+                    "temperature cache (its per-biome table) for the place they are, refreshed as they move and as",
+                    "the day goes on, and let the client decide rain or snow on screen from it, so what falls follows",
+                    "the planet's climate at that place and its hemisphere's season. Needs projectAtmosphereBase. On a",
+                    "client, turning this off makes it ignore such a cache and decide rain or snow as before."
+            );
+            DEEP_TIME_PA_CLIENT = builder.define("projectAtmosphereClient", true);
             builder.pop();
 
             builder.comment(
@@ -344,6 +353,7 @@ public final class ClimateConfig {
         private static volatile Boolean deepTimeWeather;
         private static volatile Boolean projectAtmosphereBase;
         private static volatile Float projectAtmosphereTestClimate;
+        private static volatile Boolean pollutionProjectAtmosphere;
 
         private Test() {}
 
@@ -427,6 +437,11 @@ public final class ClimateConfig {
             projectAtmosphereBase = value;
         }
 
+        public static void pollutionProjectAtmosphere(Boolean value) {
+            check();
+            pollutionProjectAtmosphere = value;
+        }
+
         /**
          * A stand-in climate for the Project Atmosphere base hook: a constant temperature, in
          * &deg;C, that the hook treats as Deep Time's reading everywhere and in any level.
@@ -462,6 +477,7 @@ public final class ClimateConfig {
             deepTimeWeather = null;
             projectAtmosphereBase = null;
             projectAtmosphereTestClimate = null;
+            pollutionProjectAtmosphere = null;
         }
 
         private static void check() {
@@ -518,8 +534,14 @@ public final class ClimateConfig {
         return loaded() ? POLLUTION_MODE.get() : PollutionMode.MODIFIER;
     }
 
-    public static int pollutionAtmosphereIntervalTicks() {
-        return loaded() ? POLLUTION_ATMOSPHERE_INTERVAL_TICKS.get() : 100;
+    /**
+     * {@code pollution.projectAtmosphere}: Destroy's warming inside Project Atmosphere's own
+     * temperature (the pollution part of {@code atmosphere.ProjectAtmosphereBase}).
+     */
+    public static boolean pollutionProjectAtmosphere() {
+        if (Test.pollutionProjectAtmosphere != null)
+            return Test.pollutionProjectAtmosphere;
+        return !loaded() || POLLUTION_PA.get();
     }
 
     public static float pollutionMultiplier() {
@@ -577,6 +599,11 @@ public final class ClimateConfig {
         if (projectAtmosphereBaseOverride != null)
             return projectAtmosphereBaseOverride;
         return !loaded() || DEEP_TIME_PA_BASE.get();
+    }
+
+    /** {@code deepTime.projectAtmosphereClient}: the per-player Deep Time client cache and its rain/snow. */
+    public static boolean projectAtmosphereClient() {
+        return !loaded() || DEEP_TIME_PA_CLIENT.get();
     }
 
     /** {@code deepTime.maxAnomaly}, degrees Celsius. */
