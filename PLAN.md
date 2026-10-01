@@ -525,3 +525,9 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
     Project Atmosphere's shaders failed to compile: they need GLSL 4.30 and macOS's OpenGL stops at 4.1
     (`version '430' is not supported`), so NeoForge refused to continue. Neither mod can run on any macOS client, so
     the on-screen rain/snow check needs a Linux or Windows client; the decision itself is covered by the GameTests.
+  - **Deep Time planet with this branch's jar** (Deep Time's `p1-25-probe.sh` from branch `p1-25-probe-sites`,
+    which scans for its land sites; it picked the same five as before): with the hook on, Project Atmosphere's AtmoApi,
+    rain-or-snow and snow/freeze readings equal the unified value to the hundredth in every phase (pollution 0 on a
+    clean sky). Undriven they equal Deep Time exactly: Af 25.2, BWk 11.1 in northern summer and 23.2 in northern winter
+    (southern hemisphere), Dfc 13.1 / −3.5, ET 1.4 / −21.8, EF 1.5 / −21.1. Driven, at midwinter noon: 27.1, 23.6,
+    −2.7, −20.4, −19.5; at midnight: 23.6, 22.9, −4.3, −22.8, −22.7.
