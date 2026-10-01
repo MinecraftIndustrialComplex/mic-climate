@@ -41,10 +41,13 @@ final class SeasonsProbe {
         boolean offSeason = ModFertility.isCropFertile(OFF_SEASON_CROP, level, pos);
         double lat = here.latitude();
         double tropical = Double.isNaN(lat) ? 0 : LatitudeSeasons.tropicalStrength(lat);
+        double temperate = Double.isNaN(lat) ? 0 : LatitudeSeasons.temperateWeight(lat);
+        String rule = Double.isNaN(lat) ? "Serene Seasons' own" : LatitudeSeasons.wetDryRule(lat) ? "wet/dry"
+                : LatitudeSeasons.temperateRule(lat) ? "temperate" : "no wet/dry cycle";
         SeasonsConfig.SeasonProperties melt = ModConfig.seasons.getSeasonProperties(here.discrete());
         return ClimateCommands.line("seasons", here.discrete().name(), String.format(Locale.ROOT,
-                "(%s; tropical wet/dry strength %.2f; SS temperature %.3f, level's %.3f, snow/ice below 0.15: %s; wheat %s, carrots %s; melt %.2f%% x%d; C %d, hooks %d/4)",
-                here.describe(), tropical, t, levels, t < 0.15f ? "yes" : "no", fertile ? "grow" : "no",
+                "(%s; tropical wet/dry strength %.2f, temperate share %.2f, tropical biomes here: %s; SS temperature %.3f, level's %.3f, snow/ice below 0.15: %s; wheat %s, carrots %s; melt %.2f%% x%d; C %d, hooks %d/4)",
+                here.describe(), tropical, temperate, rule, t, levels, t < 0.15f ? "yes" : "no", fertile ? "grow" : "no",
                 offSeason ? "grow" : "no", melt.meltChance(), melt.meltRolls(), PlanetLatitude.circumference(level),
                 boundTargets()));
     }

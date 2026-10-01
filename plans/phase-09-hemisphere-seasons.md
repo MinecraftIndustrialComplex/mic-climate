@@ -20,14 +20,20 @@ Follow-up decisions (2026-09-30, after the first build): crops **"Let them grow 
 seasonless band; tropical wet/dry **"Exempt wet/dry"**; the two settings **"Server-synced"**; the
 full-season latitude stays 45°. The branch stays unmerged for now.
 
+Second follow-up decisions (2026-09-30): **"Temperate seasons there"** (Serene Seasons' tropical
+biomes follow the normal temperate seasons outside the wet/dry band, cross-fading over 20° to 25°,
+for everything Serene Seasons decides with its tropical rule: colours, crops, precipitation,
+temperature) and **"Follow the sun"** (the tropical wet season is each hemisphere's summer half).
+
 ## The model (`seasons.LatitudeSeasons`)
 
 Latitude is Deep Time's, φ = −z · 360° / C, with C the planet's circumference.
 
-- **The south is half a year out.** South of the equator the calendar is shifted by half a cycle:
-  exactly six of Serene Seasons' twelve sub-seasons and three of its six tropical seasons. The local
-  boundaries therefore fall on the global ones; Serene Seasons' season-change events, its client
-  re-mesh and mic-climate's calendar (Early Spring = 1 March) all stay valid.
+- **The south is half a year out.** South of the equator the temperate calendar is shifted by half
+  a cycle: exactly six of Serene Seasons' twelve sub-seasons. The local boundaries therefore fall on
+  the global ones; Serene Seasons' season-change events, its client re-mesh and mic-climate's calendar
+  (Early Spring = 1 March) all stay valid. (The tropical calendar is half a year out between the
+  hemispheres too, but see "Follow the sun" below: it is the north that is moved.)
 - **Seasons fade toward the equator.** The season's strength is a smoothstep of |φ|: 0 at the
   equator, 1 at and beyond `deepTime.fullSeasonLatitude` (default 45°), half strength at half that
   latitude. At the equator the strength is 0, so the half-year jump across it is invisible.
@@ -64,9 +70,45 @@ Two things are exempt from the fading:
   otherwise grow only the summer crops). Its other rules still decide: infertile biomes, cold biomes'
   winter crops, greenhouse glass, underground.
 - **The tropical wet/dry cycle** has its own strength: 0 within 5° of the equator, a smoothstep up to
-  1 at 10°, 1 to 20°, down to 0 at 25°, shifted half a year in the south. Serene Seasons' tropical
-  biomes blend their grass, foliage and birch colours by it (not by the temperate strength), and
-  Project Atmosphere keeps its tropical wet/dry stage where it is at least 0.5 (7.5° to 22.5°).
+  1 at 10°, 1 to 20°, down to 0 at 25°. Serene Seasons' tropical biomes blend their grass, foliage and
+  birch colours by it (not by the temperate strength), and Project Atmosphere keeps its tropical
+  wet/dry stage where it is at least 0.5 (7.5° to 22.5°).
+
+### Tropical biomes beyond the wet/dry band ("Temperate seasons there")
+
+Serene Seasons gives the biomes in its `tropical_biomes` tag (jungles, savannas, deserts, badlands,
+mangroves, mushroom fields, warm ocean, plus whatever the pack adds) a separate rule: no temperature
+shift, a wet/dry calendar for colours and for whether it rains, summer crops only, and never the
+temperate cycle. Beyond the wet/dry band that left a desert at 40° N with no winter. Now, outside the
+band, they follow the normal temperate seasons, the same as any biome at that latitude (the same
+strength and, in the south, the same inversion):
+
+- `LatitudeSeasons.temperateWeight(lat)`: 0 up to 20°, a smoothstep to 1 at 25°, 1 beyond (the
+  complement of the tropical strength between 20° and 25°). Inside the band they keep wet/dry.
+- **Colours** (grass, foliage, birch) cross-fade continuously: the wet/dry colour (blended by the
+  tropical strength) to the temperate one (blended by the temperate strength) by that weight
+  (`LatitudeSeasons.tropicalBiomeColour`). At 40° N a desert is autumn orange in northern autumn.
+- **Decisions that need one rule** switch at the middle of the fade, 22.5° (`temperateRule`: beyond;
+  `wetDryRule`: 7.5° to 22.5°, the same cut as Project Atmosphere's stage): crop fertility (the
+  "summer crops only" rule gives way to the temperate crop seasons), precipitation, and the tropical
+  rule of the temperature. Nearer than 7.5° there is no wet/dry cycle at all: a tropical biome has
+  its own precipitation all year there (and every crop in the seasonless band).
+- **Temperature** cross-fades too: unshifted at 20°, the temperate shift (blended by the temperate
+  strength) at 25° and beyond. Most tagged biomes are warmer than 0.8 and never shifted by Serene
+  Seasons anyway (jungle 0.95, savanna, desert, badlands); mangrove swamp, warm ocean and any modded
+  tagged biome of 0.8 or less now cool in winter beyond the band.
+
+### The wet season follows the sun ("Follow the sun")
+
+Serene Seasons' tropical calendar has its wet season from Early Winter to Late Spring (December to
+May, with Early Spring = 1 March): the southern tropics' wet season on Earth, and the northern
+tropics' dry one. Here the wet season is each hemisphere's summer half: **the south keeps Serene
+Seasons' own tropical calendar, the north's is moved half a cycle** (three tropical seasons, exactly
+six sub-seasons; `LatitudeSeasons.shiftTropical`). At 15° N it is wet from Early Summer to Late
+Autumn (sub-seasons 3 to 8: June to November) and dry from Early Winter to Late Spring, at 15° S the
+reverse. Everything that reads the tropical season gets it from the same place: the colours, the
+local season state Project Atmosphere's delegate reads (its WET and DRY stage), and Serene Seasons'
+own precipitation rule.
 
 ## Where it hooks
 
@@ -77,16 +119,18 @@ chunk or region it is deciding for.
 
 | Mixin / hook | Target (10.1.0.3) | Technique | Covers |
 |---|---|---|---|
-| `SeasonHooksMixin` | `SeasonHooks.getBiomeTemperature(Level, Holder, BlockPos)`, its call to `getBiomeTemperatureInSeason` | `@WrapOperation`: call it with the hemisphere's sub-season, and again with Mid Summer, then blend | snow and ice placement, rain or snow (server and client, per column per frame), `isRainingAt`, the melt test, Serene Seasons Plus's snow test |
-| `ModFertilityMixin` | `ModFertility.isCropFertile(String, Level, BlockPos)`: its `SeasonHelper.getSeasonState`, its `Holder.is(TagKey)` calls, its returns | `@WrapOperation`: the discrete local state. In the seasonless band: the tropical-biome tag reads false, and a refused crop is asked about again in each season through `isCropFertile` itself (`@ModifyReturnValue`, a thread-local season) | crop growth, out-of-season behaviour, bonemeal (server and client), year-round crops near the equator |
+| `SeasonHooksMixin` | `SeasonHooks.getBiomeTemperature(Level, Holder, BlockPos)`, its call to `getBiomeTemperatureInSeason` | `@WrapOperation`: call it with the hemisphere's sub-season, and again with Mid Summer, then blend; for a tropical biome beyond the band, again with its tropical tag reading false (a thread-local), cross-faded from the unshifted value | snow and ice placement, rain or snow (server and client, per column per frame), `isRainingAt`, the melt test, Serene Seasons Plus's snow test |
+| same | `SeasonHooks.getBiomeTemperatureInSeason`, its `Holder.is` | `@WrapOperation`: the tropical-biome tag reads false while the thread-local says so | the temperate temperature shift in tropical biomes beyond the band |
+| same | `SeasonHooks.getPrecipitationAtSeasonal(Level, Holder, BlockPos)`, its call to `hasPrecipitationSeasonal`; and in `hasPrecipitationSeasonal` its `Holder.is` and `SeasonHelper.getSeasonState` | `@WrapOperation` on the call (it has the position) sets a thread-local; the two inner wraps make the tag read false (no wet/dry cycle here, or the temperate seasons) or hand over the local tropical season state | rain in tropical biomes: Serene Seasons' dry and wet seasons from the local calendar in the band, the biome's own precipitation elsewhere (client rain rendering, `isRainingAt`) |
+| `ModFertilityMixin` | `ModFertility.isCropFertile(String, Level, BlockPos)`: its `SeasonHelper.getSeasonState`, its `Holder.is(TagKey)` calls, its returns | `@WrapOperation`: the discrete local state. In the seasonless band and beyond 22.5°: the tropical-biome tag reads false (every crop near the equator, the temperate crop seasons beyond), and a refused crop in the band is asked about again in each season through `isCropFertile` itself (`@ModifyReturnValue`, a thread-local season) | crop growth, out-of-season behaviour, bonemeal (server and client), year-round crops near the equator |
 | `RandomUpdateHandlerMixin` | `RandomUpdateHandler.onWorldTick` | `@ModifyExpressionValue` on `meltChance()`/`meltRolls()` (the loop runs at the largest of any sub-season), `@WrapOperation` on `meltInChunk` (a chunk's first roll runs its own rolls at its own chance, the loop's other rolls for it are skipped), `@Inject` at HEAD (reset) | melting in the south during the northern winter, and none in the tropics' "winter" |
 | `SeasonSensorBlockMixin` | `SeasonSensorBlock.updatePower(Level, BlockPos)`, its `getSeasonState` | `@WrapOperation`: the discrete local state | the season sensor's redstone output |
-| `ModClientMixin` (client) | `ModClient.lambda$registerBlockColors$0` (the birch leaf colour handler) | `@WrapOperation` on its `getSeasonState` (the hemisphere's state), `@ModifyReturnValue` (blend toward vanilla's birch colour by the temperate strength, or the tropical one in tropical biomes) | birch leaves |
-| colour override (client, `seasons.client.SeasonsClient`) | `SeasonColorHandlers.registerResolverOverride(GRASS / FOLIAGE, …)` | **no mixin**: Serene Seasons' own extension point. Recolour with its `applySeasonal*Colouring` for the hemisphere's (tropical) season, blend toward the biome's own colour by the temperate strength, or the tropical one in tropical biomes | grass and foliage |
+| `ModClientMixin` (client) | `ModClient.lambda$registerBlockColors$0` (the birch leaf colour handler) | `@WrapOperation` on its `getSeasonState` (the hemisphere's state), `@ModifyReturnValue` (blend toward vanilla's birch colour by the temperate strength; in tropical biomes the wet/dry colour by the tropical strength, cross-faded over 20° to 25° to the temperate birch colour for the hemisphere's season) | birch leaves |
+| colour override (client, `seasons.client.SeasonsClient`) | `SeasonColorHandlers.registerResolverOverride(GRASS / FOLIAGE, …)` | **no mixin**: Serene Seasons' own extension point. Recolour with its `applySeasonal*Colouring` for the hemisphere's season, blend toward the biome's own colour by the temperate strength; tropical biomes use the (moved) tropical season blended by the tropical strength inside the band, cross-fading to the temperate colour over 20° to 25° | grass and foliage |
 
 Not patched: Serene Seasons' own season (`SeasonSavedData`), its season-change events, its weather
-frequency (level-wide rain), the calendar item, `hasPrecipitationSeasonal` (tropical dry season, no
-position), and Thermoo Patches' / InControl's / LSO's level-wide reads.
+frequency (level-wide rain), the calendar item, and Thermoo Patches' / InControl's / LSO's
+level-wide reads.
 
 ### Serene Seasons Plus (`mixin/seasons/sereneseasonsplus`)
 
@@ -106,7 +150,7 @@ delegate ignored that position.
 
 | Mixin | Target (0.9.1.2) | Effect |
 |---|---|---|
-| `SereneSeasonsSeasonDelegateMixin` | `SereneSeasonsSeasonDelegate.snapshot(Level, BlockPos)` and `moistureStage(Level, BlockPos)`, their `getSeasonState` and `usesTropicalSeasons` | asked with a position, the delegate reads the discrete local state; the tropical wet/dry stage (shifted for the south) applies where the tropical strength is at least 0.5, 7.5° to 22.5° |
+| `SereneSeasonsSeasonDelegateMixin` | `SereneSeasonsSeasonDelegate.snapshot(Level, BlockPos)` and `moistureStage(Level, BlockPos)`, their `getSeasonState` and `usesTropicalSeasons` | asked with a position, the delegate reads the discrete local state; the tropical wet/dry stage (the local tropical season: the wet season is each hemisphere's summer half) applies where the tropical strength is at least 0.5, 7.5° to 22.5°, and gives way to the temperate stage beyond |
 | `AtmosphericUpdateSchedulerMixin` | `buildStateView`, its `getBiomeSunlightMultiplier()` | each region's day heating uses its own season's sunlight multiplier (the level's multiplier is rescaled by local / level, read through Project Atmosphere's own private modifier by reflection; on failure it stays level-wide) |
 | `ClientTickHandlerMixin` (client) | `ClientTickHandler.getCurrentSeason(ClientLevel, BlockPos)` | the wind's falling leaves follow the local season |
 
@@ -152,9 +196,10 @@ mod's own value back on any exception. **Without Deep Time nothing is applied at
 
 **At runtime** (`seasons.PlanetLatitude`): only with `deepTime.hemisphereSeasons` (server config,
 default true) on, and only on a level whose circumference is positive
-(a Deep Time planet). North of the full-season latitude the level's season is the local one and every
-hook passes Serene Seasons' own value through. Off a planet every hook returns exactly what the
-patched code computed.
+(a Deep Time planet). North of the full-season latitude the level's temperate season is the local one and
+every temperate hook passes Serene Seasons' own value through (a tropical biome's wet/dry calendar is
+the north's moved one everywhere, but is read only inside the band). Off a planet every hook returns
+exactly what the patched code computed.
 
 **Cost.** The latitude is a couple of volatile reads, cached config values and one multiplication;
 nothing allocates on the colour and precipitation paths (both run per block, on mesh, Distant
@@ -199,13 +244,18 @@ Horizons and render threads).
   Atmosphere's ordinary snowfall (per position, already correct), and its warm-season melt now follows
   each chunk's own season, so it no longer clears the southern winter's snow.
 - **Weather frequency is level-wide** (Serene Seasons changes how often it rains by season).
-- **Tropical dry season** (`hasPrecipitationSeasonal`, no position) stays the level's.
 - **The calendar item** shows the level's season.
-- **Serene Seasons' tropical biomes beyond 25°** (deserts, savannas at high latitude) have no season
-  at all: their colours follow the tropical cycle, which ends there, and Serene Seasons never gives
-  them the temperate one.
-- **Project Atmosphere's wet/dry stage is on or off** (7.5° to 22.5°); only colours fade smoothly with
-  the tropical strength.
+- **The tropical-to-temperate switch of discrete decisions is on or off** (22.5°), as is Project
+  Atmosphere's wet/dry stage (7.5° to 22.5°); only colours and the temperature cross-fade smoothly.
+- **Tropical biomes' temperature beyond the band** is shifted only for tagged biomes Serene Seasons
+  would shift if they were not tropical (base temperature 0.8 or less): mangrove swamp, warm ocean,
+  modded biomes. Jungles, savannas, deserts and badlands are warmer than that and are never shifted,
+  at any latitude, as in Serene Seasons.
+- **Serene Seasons' birch handler cannot be asked twice**, so a tropical biome's temperate birch colour
+  beyond the band is computed from Serene Seasons' public season colours, its configuration and
+  its lesser-colour tag (`SereneSeasonsHemispheres.temperateBirch`), the one place the tropical rule
+  mirrors its logic.
+- **The calendar item and Serene Seasons' own debug text** show the level's tropical season.
 - **Discrete decisions change in latitude bands** (at most one sub-season per band); the blended
   quantities (colours, temperature) are smooth.
 - **Distant Horizons LODs** keep the level's season (above).
@@ -216,7 +266,9 @@ Horizons and render threads).
 the equator so the test's own blocks sit at any latitude):
 
 - **`hemisphereSeasonsArithmetic`**: strength, the half-year shift, the fading, the seasonless band,
-  the tropical wet/dry strength, colour blending, the local state's progress.
+  the tropical wet/dry strength, the moved tropical calendar, the temperate share of tropical
+  biomes and its two rules, colour blending (including a tropical biome's cross-fade), the local
+  state's progress.
 - **`hemisphereSeasonsInvisibleOffPlanet`**: with every switch on and no planet, Serene Seasons'
   temperature at five z values, wheat's fertility and the melt loop are its own, bit for bit.
 - **`hemisphereSeasonsFollowLatitude`**: at northern midwinter and midsummer, at 45 N, 30 N, 11.25 N,
@@ -224,6 +276,26 @@ the equator so the test's own blocks sit at any latitude):
   season, the discrete sub-season is the table's, wheat and carrots grow where that season says, and
   carrots grow all year in the seasonless band (5 N, the equator) but not at 11.25 N; a chunk at 45 S
   melts at the summer rate while the level has none; switched off, and off the planet, its own again.
+- **`hemisphereTropicalBiomesFollowTemperateSeasons`** ("Temperate seasons there"; a savanna and a
+  desert via `/fillbiome`): at 40 N and 40 S the season decisions use is winter / spring / summer
+  (autumn in the south's spring) in the expected hemisphere, wheat and carrots follow the temperate
+  crop seasons where Serene Seasons' own tropical rule grows wheat all year and carrots never, the
+  crop rule flips from tropical (22) to temperate (23) in both hemispheres and stays tropical at 15,
+  the seasonless band keeps every crop; a jungle rains and a savanna does not at 40 N / 40 S whatever
+  Serene Seasons' tropical calendar says, there is no dry season at 2 N, switched off is Serene
+  Seasons' own; a mangrove swamp's temperature equals the biome's own inside the band, the temperate
+  shift beyond it (40, 50, 40 S, 25) and lies between at 22.5. The colour blend is arithmetic in
+  `hemisphereSeasonsArithmetic` (a client class cannot run on the dedicated server): at 15 and 20 the
+  wet/dry colour, at 22.5 between, at 25 and beyond the temperate one at the temperate strength.
+- **`hemisphereTropicalWetSeasonFollowsTheSun`** ("Follow the sun"): for each of the twelve level
+  sub-seasons, the tropical season at 15 N is wet from Early Summer to Late Autumn and dry otherwise,
+  at 15 S the reverse; northern midsummer is wet in the north and dry in the south, northern
+  midwinter the reverse; precipitation in a savanna and a jungle agrees (rain in the wet season, none
+  in the dry, both hemispheres); Serene Seasons alone keeps its own calendar.
+- **`hemisphereAtmosphereWetDryFollowsTheSun`** (Project Atmosphere): its stage in a savanna at 15 N is
+  WET in northern midsummer and DRY in midwinter, at 15 S the reverse, agreeing with Serene Seasons'
+  tropical season; it applies at 22 and gives way at 23 (both hemispheres), and beyond the band the
+  stage is the hemisphere's temperate season.
 - **`hemisphereSeasonsServerConfig`**: both settings come from the world's server config, with their
   defaults.
 - **`hemisphereSeasonsHooksBind`**: 4/4 Serene Seasons, 1/1 Serene Seasons Plus, 2/2 Project

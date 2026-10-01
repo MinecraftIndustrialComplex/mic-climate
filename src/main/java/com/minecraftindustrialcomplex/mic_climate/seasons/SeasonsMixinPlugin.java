@@ -75,6 +75,14 @@ public class SeasonsMixinPlugin implements IMixinConfigPlugin {
 
     private static final Method GET_BIOME_TEMPERATURE = new Method("getBiomeTemperature",
             "(" + LEVEL + HOLDER + BLOCK_POS + ")F");
+    private static final String SEASON_HOOKS = "sereneseasons/season/SeasonHooks";
+    private static final String HOLDER_OWNER = "net/minecraft/core/Holder";
+    private static final String TAG_TEST_DESC = "(Lnet/minecraft/tags/TagKey;)Z";
+    private static final Method IN_SEASON = new Method("getBiomeTemperatureInSeason",
+            "(" + SUB_SEASON + HOLDER + BLOCK_POS + ")F");
+    private static final Method HAS_PRECIPITATION = new Method("hasPrecipitationSeasonal", "(" + LEVEL + HOLDER + ")Z");
+    private static final Method PRECIPITATION_AT = new Method("getPrecipitationAtSeasonal",
+            "(" + LEVEL + HOLDER + BLOCK_POS + ")Lnet/minecraft/world/level/biome/Biome$Precipitation;");
     private static final Method IS_CROP_FERTILE = new Method("isCropFertile",
             "(Ljava/lang/String;" + LEVEL + BLOCK_POS + ")Z");
     private static final Method ON_WORLD_TICK = new Method("onWorldTick", "(Lglitchcore/event/TickEvent$Level;)V");
@@ -85,9 +93,12 @@ public class SeasonsMixinPlugin implements IMixinConfigPlugin {
 
     private static final Map<String, Needs> NEEDS = Map.of(
             "sereneseasons.SeasonHooksMixin", new Needs(SS_MOD,
-                    List.of(GET_BIOME_TEMPERATURE),
-                    List.of(new Call(GET_BIOME_TEMPERATURE, "sereneseasons/season/SeasonHooks", "getBiomeTemperatureInSeason",
-                            "(" + SUB_SEASON + HOLDER + BLOCK_POS + ")F"))),
+                    List.of(GET_BIOME_TEMPERATURE, IN_SEASON, HAS_PRECIPITATION, PRECIPITATION_AT),
+                    List.of(new Call(GET_BIOME_TEMPERATURE, SEASON_HOOKS, "getBiomeTemperatureInSeason", IN_SEASON.desc()),
+                            new Call(IN_SEASON, HOLDER_OWNER, "is", TAG_TEST_DESC),
+                            new Call(PRECIPITATION_AT, SEASON_HOOKS, "hasPrecipitationSeasonal", HAS_PRECIPITATION.desc()),
+                            new Call(HAS_PRECIPITATION, HOLDER_OWNER, "is", TAG_TEST_DESC),
+                            new Call(HAS_PRECIPITATION, GET_SEASON_STATE_OWNER, "getSeasonState", GET_SEASON_STATE_DESC))),
             "sereneseasons.ModFertilityMixin", new Needs(SS_MOD,
                     List.of(IS_CROP_FERTILE),
                     List.of(new Call(IS_CROP_FERTILE, GET_SEASON_STATE_OWNER, "getSeasonState", GET_SEASON_STATE_DESC),

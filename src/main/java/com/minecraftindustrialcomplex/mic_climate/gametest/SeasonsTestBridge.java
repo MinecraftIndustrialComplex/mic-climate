@@ -4,11 +4,17 @@ import com.minecraftindustrialcomplex.mic_climate.seasons.SeasonsHooked;
 import com.minecraftindustrialcomplex.mic_climate.seasons.SereneSeasonsHemispheres;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.QuartPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainer;
 import sereneseasons.api.season.ISeasonState;
 import sereneseasons.api.season.Season;
 import sereneseasons.api.season.SeasonHelper;
@@ -16,6 +22,8 @@ import sereneseasons.init.ModConfig;
 import sereneseasons.init.ModFertility;
 import sereneseasons.season.SeasonHooks;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -52,6 +60,97 @@ final class SeasonsTestBridge {
 
     static Holder<Biome> plains(ServerLevel level) {
         return level.registryAccess().registryOrThrow(Registries.BIOME).getHolderOrThrow(Biomes.PLAINS);
+    }
+
+    static Holder<Biome> biome(ServerLevel level, ResourceKey<Biome> key) {
+        return level.registryAccess().registryOrThrow(Registries.BIOME).getHolderOrThrow(key);
+    }
+
+    /** The biome at {@code pos}. */
+    static ResourceKey<Biome> biomeAt(ServerLevel level, BlockPos pos) {
+        return level.getBiome(pos).unwrapKey().orElseThrow();
+    }
+
+    /**
+     * Changes the biome around a position for the length of a test, and puts it back. {@code Level.getBiome}
+     * does not read the one 4x4x4 cell a block is in: the biome manager's zoom picks, by a hash of the
+     * block, any of the cells around, so the 3x3x3 cells around the position are all set, straight into
+     * the chunk sections' biome containers (as {@code /fillbiome} would, which refuses the far-out
+     * coordinates a GameTest structure sits at). Crops and precipitation read the level's biome.
+     */
+    static final class BiomeSwap {
+        private final ServerLevel level;
+        private final BlockPos pos;
+        /** Every cell set so far and the biome it held, in order. */
+        private final List<BlockPos> cells = new ArrayList<>();
+        private final List<Holder<Biome>> before = new ArrayList<>();
+
+        BiomeSwap(ServerLevel level, BlockPos pos) {
+            this.level = level;
+            this.pos = pos;
+        }
+
+        void set(ResourceKey<Biome> biome) {
+            Holder<Biome> holder = biome(level, biome);
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        BlockPos cell = new BlockPos(pos.getX() + 4 * dx,
+                                Mth.clamp(pos.getY() + 4 * dy, level.getMinBuildHeight(), level.getMaxBuildHeight() - 1),
+                                pos.getZ() + 4 * dz);
+                        cells.add(cell);
+                        before.add(put(cell, holder));
+                    }
+                }
+            }
+        }
+
+        /** Undoes every {@link #set}, last first. */
+        void restore() {
+            for (int i = cells.size() - 1; i >= 0; i--)
+                put(cells.get(i), before.get(i));
+            cells.clear();
+            before.clear();
+        }
+
+        @SuppressWarnings("unchecked")
+        private Holder<Biome> put(BlockPos cell, Holder<Biome> holder) {
+            LevelChunk chunk = level.getChunkAt(cell);
+            LevelChunkSection section = chunk.getSection(chunk.getSectionIndex(cell.getY()));
+            PalettedContainer<Holder<Biome>> biomes = (PalettedContainer<Holder<Biome>>) section.getBiomes();
+            Holder<Biome> was = biomes.getAndSetUnchecked(QuartPos.fromBlock(cell.getX()) & 3,
+                    QuartPos.fromBlock(cell.getY()) & 3, QuartPos.fromBlock(cell.getZ()) & 3, holder);
+            chunk.setUnsaved(true);
+            return was;
+        }
+    }
+
+    /** Whether Serene Seasons' tropical-biome tag holds the biome. */
+    static boolean tropical(Holder<Biome> biome) {
+        return SeasonHelper.usesTropicalSeasons(biome);
+    }
+
+    /** Serene Seasons' precipitation (rain, snow or none) for a biome at a position, as its client and {@code isRainingAt} ask. */
+    static Biome.Precipitation precipitation(ServerLevel level, Holder<Biome> biome, BlockPos pos) {
+        return SeasonHooks.getPrecipitationAtSeasonal(level, biome, pos);
+    }
+
+    /**
+     * The temperature Serene Seasons would give a biome that is not tropical to it, in a sub-season: its
+     * own {@code biomeTempAdjustment} for the season added to the biome's temperature, clamped as it
+     * does (the reference for tropical biomes beyond the wet/dry band).
+     */
+    static float temperateTemperature(Holder<Biome> biome, BlockPos pos, Season.SubSeason season) {
+        float base = ownTemperature(biome, pos);
+        return Mth.clamp(base + ModConfig.seasons.getSeasonProperties(season).biomeTempAdjustment(), -0.5f, 2.0f);
+    }
+
+    /**
+     * A tropical biome's own temperature at a position: what Serene Seasons gives it in every season (it
+     * shifts none), here asked of its own {@code getBiomeTemperatureInSeason} with no latitude involved.
+     */
+    static float ownTemperature(Holder<Biome> biome, BlockPos pos) {
+        return SeasonHooks.getBiomeTemperatureInSeason(Season.SubSeason.MID_SUMMER, biome, pos);
     }
 
     /** Serene Seasons' seasonal biome temperature, through the method its snow and ice code calls. */

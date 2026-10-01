@@ -11,10 +11,10 @@ import sereneseasons.api.season.Season;
  * place:
  *
  * <ul>
- *   <li><b>The south is half a year out.</b> South of the equator the calendar is shifted by half
- *       a cycle. That is exactly six of Serene Seasons' twelve sub-seasons and three of its six
- *       tropical seasons, so the local boundaries fall on the global ones and nothing changes at a
- *       moment Serene Seasons does not already handle.</li>
+ *   <li><b>The south is half a year out.</b> South of the equator the temperate calendar is shifted by
+ *       half a cycle. That is exactly six of Serene Seasons' twelve sub-seasons (and three of its six
+ *       tropical seasons, which {@link #shiftTropical} also uses), so the local boundaries fall on the
+ *       global ones and nothing changes at a moment Serene Seasons does not already handle.</li>
  *   <li><b>Seasons fade toward the equator.</b> The season's strength is {@link #strength}: 1 at
  *       and beyond {@code fullLatitude} degrees, 0 at the equator, and a smoothstep in between, so
  *       it has no kink anywhere and reaches no seasons at the equator. Because the strength is 0
@@ -47,9 +47,26 @@ import sereneseasons.api.season.Season;
  *       season never leaves Mid Summer: every crop counts as in season there, spring- and
  *       autumn-only ones too.</li>
  *   <li><b>The tropical wet/dry cycle</b> has its own strength ({@link #tropicalStrength}): none within
- *       5 degrees of the equator, full between 10 and 20 degrees, none beyond 25, shifted half a year
- *       in the south like everything else. Serene Seasons uses it for its tropical biomes' colours and
- *       Project Atmosphere for its tropical moisture stage.</li>
+ *       5 degrees of the equator, full between 10 and 20 degrees, none beyond 25. Serene Seasons uses
+ *       it for its tropical biomes' colours and Project Atmosphere for its tropical moisture stage.</li>
+ * </ul>
+ *
+ * <p>And two decisions about the tropics (Ben, 2026-09-30, the second follow-up):
+ *
+ * <ul>
+ *   <li><b>"Temperate seasons there."</b> Serene Seasons never gives its tropical biomes (jungles,
+ *       savannas, deserts, badlands, ...) the temperate cycle, so beyond the wet/dry band a desert at
+ *       40 degrees north would have no winter. They now follow the normal temperate seasons outside
+ *       the band, cross-fading over 20 to 25 degrees ({@link #temperateWeight}): full wet/dry at 20,
+ *       full temperate at 25 and beyond. Colours blend continuously; the decisions that need one rule
+ *       (crops, precipitation, Project Atmosphere's stage) switch at the middle of the fade, 22.5
+ *       degrees ({@link #temperateRule}, {@link #wetDryRule}).</li>
+ *   <li><b>"Follow the sun."</b> Serene Seasons' own tropical calendar has its wet season from Early
+ *       Winter to Late Spring, which is the southern tropics' wet season on Earth, and the northern
+ *       tropics' dry one. Here the wet season is each hemisphere's summer half: the south keeps
+ *       Serene Seasons' calendar, the north moves it half a cycle ({@link #shiftTropical}), so at 15
+ *       degrees north it is wet from Early Summer to Late Autumn and dry from Early Winter to Late
+ *       Spring, and the reverse at 15 degrees south.</li>
  * </ul>
  */
 public final class LatitudeSeasons {
@@ -116,6 +133,52 @@ public final class LatitudeSeasons {
         return smooth((TROPICS_END - a) / (TROPICS_END - TROPICS_FADE));
     }
 
+    /**
+     * How much of an SS-tropical biome's season is the temperate one at {@code latitudeDeg} ("Temperate
+     * seasons there"): 0 up to {@link #TROPICS_FADE} degrees (the wet/dry band), a smoothstep to 1 at
+     * {@link #TROPICS_END}, 1 beyond. The complement of {@link #tropicalStrength} beyond the fade, so a
+     * tropical biome at 22.5 degrees is half wet/dry, half temperate.
+     */
+    public static double temperateWeight(double latitudeDeg) {
+        double a = Math.abs(latitudeDeg);
+        if (a <= TROPICS_FADE)
+            return 0.0;
+        if (a >= TROPICS_END)
+            return 1.0;
+        return smooth((a - TROPICS_FADE) / (TROPICS_END - TROPICS_FADE));
+    }
+
+    /**
+     * Whether an SS-tropical biome follows the temperate seasons for the decisions that need one rule
+     * (crops, precipitation, Project Atmosphere's moisture stage): beyond the middle of the 20 to 25
+     * degree fade, 22.5 degrees.
+     */
+    public static boolean temperateRule(double latitudeDeg) {
+        return temperateWeight(latitudeDeg) > 0.5;
+    }
+
+    /**
+     * Whether Serene Seasons' tropical wet/dry rule applies to an SS-tropical biome for the decisions
+     * that need one rule: where {@link #tropicalStrength} is at least {@link #TROPICAL_CUTOFF}, 7.5 to
+     * 22.5 degrees. Nearer the equator there is no wet/dry cycle (the biome's own precipitation all
+     * year), beyond it the temperate seasons ({@link #temperateRule}).
+     */
+    public static boolean wetDryRule(double latitudeDeg) {
+        return tropicalStrength(latitudeDeg) >= TROPICAL_CUTOFF;
+    }
+
+    /**
+     * An SS-tropical biome's grass, foliage or birch colour at one place: its wet/dry colour blended
+     * from {@code original} by the tropical strength {@code t}, its temperate colour blended by the
+     * temperate strength {@code w}, and the two cross-faded by {@link #temperateWeight} {@code x}.
+     * {@code wetDry} is only read when {@code x < 1} and {@code temperate} only when {@code x > 0}.
+     */
+    public static int tropicalBiomeColour(int original, int wetDry, int temperate, double t, double w, double x) {
+        int tropical = x >= 1.0 ? original : lerpRgb(original, wetDry, t);
+        int temperateColour = x <= 0.0 ? original : lerpRgb(original, temperate, w);
+        return lerpRgb(tropical, temperateColour, x);
+    }
+
     private static double smooth(double t) {
         return t * t * (3.0 - 2.0 * t);
     }
@@ -125,7 +188,10 @@ public final class LatitudeSeasons {
         return latitudeDeg < 0;
     }
 
-    /** True where Serene Seasons' own season applies unchanged: north, at full strength. */
+    /**
+     * True where Serene Seasons' own temperate season applies unchanged: north, at full strength. (Its
+     * tropical calendar never does: the north's is moved, {@link #shiftTropical}.)
+     */
     public static boolean unchanged(double latitudeDeg, double strength) {
         return !south(latitudeDeg) && strength >= 1.0;
     }
@@ -135,9 +201,20 @@ public final class LatitudeSeasons {
         return south ? (subSeason + SUB_SEASONS / 2) % SUB_SEASONS : subSeason;
     }
 
-    /** A tropical season index (0 = Early Dry) shifted half a year in the south. */
+    /**
+     * A tropical season index (0 = Early Dry) as the hemisphere sees it ("Follow the sun"): the wet
+     * season is the hemisphere's summer half. Serene Seasons' own tropical calendar is wet from
+     * Early Winter to Late Spring, that is the southern summer and autumn, so the south keeps it and
+     * the north is moved half a cycle (three of the six tropical seasons, exactly six sub-seasons, so
+     * every boundary still falls on one of Serene Seasons' own).
+     */
     public static int shiftTropical(int tropicalSeason, boolean south) {
-        return south ? (tropicalSeason + TROPICAL_SEASONS / 2) % TROPICAL_SEASONS : tropicalSeason;
+        return south ? tropicalSeason : (tropicalSeason + TROPICAL_SEASONS / 2) % TROPICAL_SEASONS;
+    }
+
+    /** True in the wet half of Serene Seasons' tropical cycle (Early Wet, Mid Wet, Late Wet). */
+    public static boolean wet(Season.TropicalSeason season) {
+        return season.ordinal() >= Season.TropicalSeason.EARLY_WET.ordinal();
     }
 
     /**

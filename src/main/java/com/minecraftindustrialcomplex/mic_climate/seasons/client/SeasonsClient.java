@@ -29,9 +29,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * mods registered through {@code SeasonColorHandlers.registerResolverOverride} (added "for other
  * mods" in 2024). That override is used here, with no mixin: on a Deep Time planet it recolours
  * the block with Serene Seasons' own {@code applySeasonal*Colouring} for the hemisphere's
- * (sub-)season, then blends toward the biome's own colour (Mid Summer's, and Early Dry's) by the
- * season's strength: the tropical wet/dry cycle's in Serene Seasons' tropical biomes, the temperate
- * seasons' everywhere else.
+ * sub-season, then blends toward the biome's own colour (Mid Summer's) by the temperate strength.
+ * Serene Seasons' tropical biomes use its tropical calendar instead inside the wet/dry band (blended
+ * by the tropical strength; the wet season is the hemisphere's summer half) and the temperate seasons
+ * beyond it, cross-fading over 20 to 25 degrees ({@link LatitudeSeasons#tropicalBiomeColour}).
  * Off a planet, north of the full-season latitude, or on any error it returns Serene Seasons'
  * colour untouched.
  *
@@ -84,25 +85,34 @@ public final class SeasonsClient {
             double lat = PlanetLatitude.latitude(level, z);
             if (Double.isNaN(lat))
                 return current;
-            // Serene Seasons' tropical biomes follow the tropical wet/dry cycle, which has its own
-            // latitude band; everything else follows the temperate seasons.
-            boolean tropical = SeasonHelper.usesTropicalSeasons(biome);
-            double w = tropical ? LatitudeSeasons.tropicalStrength(lat) : PlanetLatitude.strength(lat);
-            if (LatitudeSeasons.unchanged(lat, w))
-                return current;
             ISeasonState global = SeasonHelper.getSeasonState(level);
-            ISeasonColorProvider provider = tropical
-                    ? LatitudeSeasons.shifted(global.getTropicalSeason(), lat)
-                    : LatitudeSeasons.shifted(global.getSubSeason(), lat);
-            int local = grass
-                    ? SeasonColorUtil.applySeasonalGrassColouring(provider, biome, original)
-                    : SeasonColorUtil.applySeasonalFoliageColouring(provider, biome, original);
-            return LatitudeSeasons.lerpRgb(original, local, w);
+            double w = PlanetLatitude.strength(lat);
+            if (!SeasonHelper.usesTropicalSeasons(biome)) {
+                if (LatitudeSeasons.unchanged(lat, w))
+                    return current;
+                return LatitudeSeasons.lerpRgb(original, apply(grass, LatitudeSeasons.shifted(global.getSubSeason(), lat), biome, original), w);
+            }
+            // Serene Seasons' tropical biomes follow the tropical wet/dry cycle inside its band (its own
+            // latitude band; the wet season is the hemisphere's summer half) and the temperate seasons
+            // beyond it, cross-fading over 20 to 25 degrees.
+            double wetDryStrength = LatitudeSeasons.tropicalStrength(lat);
+            double temperateShare = LatitudeSeasons.temperateWeight(lat);
+            int wetDry = temperateShare < 1.0 && wetDryStrength > 0.0
+                    ? apply(grass, LatitudeSeasons.shifted(global.getTropicalSeason(), lat), biome, original) : original;
+            int temperate = temperateShare > 0.0
+                    ? apply(grass, LatitudeSeasons.shifted(global.getSubSeason(), lat), biome, original) : original;
+            return LatitudeSeasons.tropicalBiomeColour(original, wetDry, temperate, wetDryStrength, w, temperateShare);
         } catch (Throwable t) {
             if (LOGGED_FAILURE.compareAndSet(false, true))
                 MicClimate.LOGGER.warn("Hemisphere season colours failed; Serene Seasons' own colours are used", t);
             return current;
         }
+    }
+
+    /** Serene Seasons' own grass or foliage colouring of {@code original} for one season. */
+    private static int apply(boolean grass, ISeasonColorProvider season, Holder<Biome> biome, int original) {
+        return grass ? SeasonColorUtil.applySeasonalGrassColouring(season, biome, original)
+                : SeasonColorUtil.applySeasonalFoliageColouring(season, biome, original);
     }
 
     /** Once a client tick: re-mesh when the level on screen became (or stopped being) a planet, or the switch moved. */

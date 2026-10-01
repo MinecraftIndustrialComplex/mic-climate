@@ -12,12 +12,15 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.Biomes;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import sereneseasons.api.season.ISeasonState;
 import sereneseasons.api.season.Season;
 
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -63,8 +66,16 @@ public final class HemisphereSeasonsGameTests {
                 LatitudeSeasons.shifted(Season.SubSeason.MID_WINTER, -10) == Season.SubSeason.MID_SUMMER
                         && LatitudeSeasons.shifted(Season.SubSeason.EARLY_SPRING, -10) == Season.SubSeason.EARLY_AUTUMN
                         && LatitudeSeasons.shifted(Season.SubSeason.MID_WINTER, 10) == Season.SubSeason.MID_WINTER);
-        GameTests.assertTrue("the south's tropical season is half a cycle out: Early Dry -> Early Wet",
-                LatitudeSeasons.shifted(Season.TropicalSeason.EARLY_DRY, -1) == Season.TropicalSeason.EARLY_WET);
+        GameTests.assertTrue("follow the sun: the south keeps Serene Seasons' tropical calendar, the north's is half a cycle out",
+                LatitudeSeasons.shifted(Season.TropicalSeason.EARLY_DRY, -1) == Season.TropicalSeason.EARLY_DRY
+                        && LatitudeSeasons.shifted(Season.TropicalSeason.EARLY_DRY, 1) == Season.TropicalSeason.EARLY_WET
+                        && LatitudeSeasons.shifted(Season.TropicalSeason.MID_WET, 1) == Season.TropicalSeason.MID_DRY
+                        && LatitudeSeasons.shifted(Season.TropicalSeason.LATE_WET, 10) == Season.TropicalSeason.LATE_DRY);
+        boolean opposite = true;
+        for (Season.TropicalSeason t : Season.TropicalSeason.VALUES) {
+            opposite &= LatitudeSeasons.wet(LatitudeSeasons.shifted(t, 15)) != LatitudeSeasons.wet(LatitudeSeasons.shifted(t, -15));
+        }
+        GameTests.assertTrue("the two hemispheres' tropical calendars are always opposite: one wet, the other dry", opposite);
         GameTests.assertTrue("discrete seasons fade toward Mid Summer: Mid Winter at full, 30, 11.25 and 0 degrees",
                 LatitudeSeasons.discrete(Season.SubSeason.MID_WINTER, 45, 1.0) == Season.SubSeason.MID_WINTER
                         && LatitudeSeasons.discrete(Season.SubSeason.MID_WINTER, 30, LatitudeSeasons.strength(30, full)) == Season.SubSeason.EARLY_SPRING
@@ -81,6 +92,43 @@ public final class HemisphereSeasonsGameTests {
         GameTests.assertNear("tropical wet/dry strength at 15 S", LatitudeSeasons.tropicalStrength(-15), 1, 0);
         GameTests.assertNear("tropical wet/dry strength at 22.5 N", LatitudeSeasons.tropicalStrength(22.5), 0.5, 1e-12);
         GameTests.assertNear("tropical wet/dry strength at 30 N", LatitudeSeasons.tropicalStrength(30), 0, 0);
+        // "Temperate seasons there": an SS-tropical biome is wet/dry up to 20 degrees, temperate from 25, between a blend.
+        GameTests.assertNear("temperate share at 20 N", LatitudeSeasons.temperateWeight(20), 0, 0);
+        GameTests.assertNear("temperate share at 20 S", LatitudeSeasons.temperateWeight(-20), 0, 0);
+        GameTests.assertNear("temperate share at 22.5 N", LatitudeSeasons.temperateWeight(22.5), 0.5, 1e-12);
+        GameTests.assertNear("temperate share at 25 S", LatitudeSeasons.temperateWeight(-25), 1, 0);
+        GameTests.assertNear("temperate share at 40 N", LatitudeSeasons.temperateWeight(40), 1, 0);
+        GameTests.assertNear("temperate share at the equator", LatitudeSeasons.temperateWeight(0), 0, 0);
+        GameTests.assertNear("temperate share and wet/dry strength sum to 1 at 21", LatitudeSeasons.temperateWeight(21)
+                + LatitudeSeasons.tropicalStrength(21), 1, 1e-12);
+        GameTests.assertNear("temperate share and wet/dry strength sum to 1 at 24 S", LatitudeSeasons.temperateWeight(-24)
+                + LatitudeSeasons.tropicalStrength(-24), 1, 1e-12);
+        GameTests.assertTrue("the wet/dry rule applies from 7.5 to 22.5 degrees, both hemispheres, nowhere else",
+                !LatitudeSeasons.wetDryRule(0) && !LatitudeSeasons.wetDryRule(7.4) && LatitudeSeasons.wetDryRule(7.6)
+                        && LatitudeSeasons.wetDryRule(15) && LatitudeSeasons.wetDryRule(-22.4)
+                        && !LatitudeSeasons.wetDryRule(22.6) && !LatitudeSeasons.wetDryRule(-30));
+        GameTests.assertTrue("the temperate rule applies beyond 22.5 degrees, both hemispheres, and not within it",
+                !LatitudeSeasons.temperateRule(0) && !LatitudeSeasons.temperateRule(15) && !LatitudeSeasons.temperateRule(22.4)
+                        && LatitudeSeasons.temperateRule(22.6) && LatitudeSeasons.temperateRule(-30) && LatitudeSeasons.temperateRule(70));
+        // A tropical biome's colour: grey 100, wet/dry colour 200, temperate colour 0 (every channel).
+        int grey = 0x646464, wetDryColour = 0xC8C8C8, temperateColour = 0x000000;
+        int at15 = tropicalColour(grey, wetDryColour, temperateColour, 15, full);
+        int at20 = tropicalColour(grey, wetDryColour, temperateColour, 20, full);
+        int at225 = tropicalColour(grey, wetDryColour, temperateColour, 22.5, full);
+        int at25 = tropicalColour(grey, wetDryColour, temperateColour, 25, full);
+        int at40 = tropicalColour(grey, wetDryColour, temperateColour, 40, full);
+        int at40S = tropicalColour(grey, wetDryColour, temperateColour, -40, full);
+        GameTests.record("a tropical biome's colour channel at 15 / 20 / 22.5 / 25 / 40 / 40 S (grey 100, wet/dry 200, temperate 0)",
+                (at15 & 0xFF) + " / " + (at20 & 0xFF) + " / " + (at225 & 0xFF) + " / " + (at25 & 0xFF) + " / " + (at40 & 0xFF)
+                        + " / " + (at40S & 0xFF));
+        GameTests.assertTrue("inside the wet/dry band the colour is the wet/dry one (15 and 20 degrees)",
+                at15 == wetDryColour && at20 == wetDryColour);
+        GameTests.assertTrue("at 25 degrees and beyond it is the temperate colour at the temperate strength, as for any biome",
+                at25 == LatitudeSeasons.lerpRgb(grey, temperateColour, LatitudeSeasons.strength(25, full))
+                        && at40 == LatitudeSeasons.lerpRgb(grey, temperateColour, LatitudeSeasons.strength(40, full))
+                        && at40S == at40);
+        GameTests.assertTrue("at 22.5 degrees the colour is between the wet/dry and the temperate one: " + Integer.toHexString(at225),
+                (at225 & 0xFF) < (at20 & 0xFF) && (at225 & 0xFF) > (at25 & 0xFF) && at225 == 0x646464);
         GameTests.assertTrue("colours blend channel by channel",
                 LatitudeSeasons.lerpRgb(0x00000000, 0xFFFFFFFF, 0.5) == 0x80808080
                         && LatitudeSeasons.lerpRgb(0x123456, 0xABCDEF, 0) == 0x123456
@@ -93,6 +141,12 @@ public final class HemisphereSeasonsGameTests {
                 south.getSubSeason() == Season.SubSeason.MID_SUMMER && south.getSeason() == Season.SUMMER
                         && south.getSeasonCycleTicks() == Season.SubSeason.MID_SUMMER.ordinal() * 1000 + 5
                         && south.getTropicalSeason() == LatitudeSeasons.shifted(winter.getTropicalSeason(), -45));
+    }
+
+    /** The colour {@link LatitudeSeasons#tropicalBiomeColour} gives an SS-tropical biome at a latitude, as the client asks it. */
+    private static int tropicalColour(int original, int wetDry, int temperate, double latitude, double full) {
+        return LatitudeSeasons.tropicalBiomeColour(original, wetDry, temperate, LatitudeSeasons.tropicalStrength(latitude),
+                LatitudeSeasons.strength(latitude, full), LatitudeSeasons.temperateWeight(latitude));
     }
 
     /** Off a planet (no stand-in), with every switch on, Serene Seasons' answers are its own, bit for bit. */
@@ -251,6 +305,257 @@ public final class HemisphereSeasonsGameTests {
     }
 
     /**
+     * "Temperate seasons there": Serene Seasons' tropical biomes (a savanna and a desert here) follow the
+     * temperate seasons outside the wet/dry band. At northern midwinter, midspring and midsummer, on the
+     * stand-in planet: at 40 N and 40 S the season decisions use is winter / summer, and the reverse in
+     * the south; wheat and carrots follow the temperate crop seasons (Serene Seasons' own tropical rule
+     * lets wheat grow all year and carrots never); precipitation is the biome's own, not the tropical
+     * wet/dry calendar; at 22 and 23 degrees the crop rule flips from tropical to temperate; a
+     * tropical biome of a temperature Serene Seasons would shift (a mangrove swamp) gets the temperate
+     * shift beyond the band, none inside it, and half-way between at 22.5 degrees. Serene Seasons' own
+     * rule is untouched off the planet.
+     */
+    @GameTest(template = GameTests.TEMPLATE, timeoutTicks = 200, batch = "mic_climate_seasons_on")
+    public static void hemisphereTropicalBiomesFollowTemperateSeasons(GameTestHelper helper) {
+        if (GameTests.skipWithout(helper, Compat.SERENE_SEASONS))
+            return;
+        runTemperateTropics(helper);
+    }
+
+    private static void runTemperateTropics(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = GameTests.centre(helper).above(2);
+        Season.SubSeason before = SeasonsTestBridge.subSeason(level);
+        SeasonsTestBridge.BiomeSwap swap = new SeasonsTestBridge.BiomeSwap(level, pos);
+        try {
+            ClimateConfig.Test.deepTimeEnabled(true);
+            ClimateConfig.Test.hemisphereSeasons(true);
+            for (ResourceKey<Biome> key : List.of(Biomes.SAVANNA, Biomes.DESERT)) {
+                swap.set(key);
+                Holder<Biome> biome = SeasonsTestBridge.biome(level, key);
+                String name = key.location().getPath();
+                GameTests.assertTrue(name + " is one of Serene Seasons' tropical biomes", SeasonsTestBridge.tropical(biome));
+                GameTests.assertTrue(name + " is the biome at the test position",
+                        SeasonsTestBridge.biomeAt(level, pos).equals(key));
+
+                // Serene Seasons alone (no planet): its tropical rule, wheat in every season and carrots in none.
+                ClimateConfig.Test.seasonTestPlanet(null);
+                SeasonsTestBridge.setSeason(level, Season.SubSeason.MID_WINTER);
+                boolean ownWinterWheat = SeasonsTestBridge.fertile(WHEAT, level, pos);
+                SeasonsTestBridge.setSeason(level, Season.SubSeason.MID_SPRING);
+                boolean ownSpringCarrots = SeasonsTestBridge.fertile(CARROTS, level, pos);
+                GameTests.record(name + ", Serene Seasons alone: wheat in winter / carrots in spring", ownWinterWheat + " / " + ownSpringCarrots);
+                GameTests.assertTrue(name + ": Serene Seasons' tropical rule grows wheat in winter and carrots never",
+                        ownWinterWheat && !ownSpringCarrots);
+
+                // Northern midwinter, midspring, midsummer at 40 N and 40 S.
+                //                      level's season                  | 40 N: discrete, wheat, carrots | 40 S
+                checkTropical(level, pos, name, 40, Season.SubSeason.MID_WINTER, Season.SubSeason.MID_WINTER, false, false);
+                checkTropical(level, pos, name, 40, Season.SubSeason.MID_SPRING, Season.SubSeason.MID_SPRING, false, true);
+                checkTropical(level, pos, name, 40, Season.SubSeason.MID_SUMMER, Season.SubSeason.MID_SUMMER, true, false);
+                checkTropical(level, pos, name, -40, Season.SubSeason.MID_WINTER, Season.SubSeason.MID_SUMMER, true, false);
+                checkTropical(level, pos, name, -40, Season.SubSeason.MID_SPRING, Season.SubSeason.MID_AUTUMN, true, true);
+                checkTropical(level, pos, name, -40, Season.SubSeason.MID_SUMMER, Season.SubSeason.MID_WINTER, false, false);
+
+                // Inside the wet/dry band the tropical rule stays (22 degrees), beyond its middle the temperate one (23).
+                checkTropical(level, pos, name, 22, Season.SubSeason.MID_WINTER, null, true, false);
+                checkTropical(level, pos, name, 23, Season.SubSeason.MID_WINTER, Season.SubSeason.MID_SPRING, false, true);
+                checkTropical(level, pos, name, -22, Season.SubSeason.MID_SUMMER, null, true, false);
+                checkTropical(level, pos, name, -23, Season.SubSeason.MID_SUMMER, Season.SubSeason.MID_SPRING, false, true);
+                checkTropical(level, pos, name, 15, Season.SubSeason.MID_WINTER, null, true, false);
+                checkTropical(level, pos, name, 15, Season.SubSeason.MID_SPRING, null, true, false);
+                // The seasonless band near the equator keeps its own rule: every crop, year-round.
+                checkTropical(level, pos, name, 2, Season.SubSeason.MID_WINTER, Season.SubSeason.MID_SUMMER, true, true);
+            }
+
+            // Precipitation: a jungle rains and a savanna does not, as the biomes themselves; the tropical
+            // wet/dry calendar decides only inside the band.
+            Holder<Biome> jungle = SeasonsTestBridge.biome(level, Biomes.JUNGLE);
+            Holder<Biome> savanna = SeasonsTestBridge.biome(level, Biomes.SAVANNA);
+            ClimateConfig.Test.seasonTestPlanet(null);
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.LATE_SUMMER);
+            Biome.Precipitation ownJungle = SeasonsTestBridge.precipitation(level, jungle, pos);
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.EARLY_SPRING);
+            Biome.Precipitation ownSavanna = SeasonsTestBridge.precipitation(level, savanna, pos);
+            GameTests.record("Serene Seasons alone: a jungle in its Late Summer (its Mid Dry) / a savanna in its Early Spring (its Mid Wet)",
+                    ownJungle + " / " + ownSavanna);
+            GameTests.assertTrue("Serene Seasons alone: a dry season takes a jungle's rain, a wet season rains on a savanna",
+                    ownJungle == Biome.Precipitation.NONE && ownSavanna == Biome.Precipitation.RAIN);
+            planetWith(pos.getZ(), 40);
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.LATE_SUMMER);
+            Biome.Precipitation north40Jungle = SeasonsTestBridge.precipitation(level, jungle, pos);
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.EARLY_SPRING);
+            Biome.Precipitation north40Savanna = SeasonsTestBridge.precipitation(level, savanna, pos);
+            planetWith(pos.getZ(), -40);
+            Biome.Precipitation south40Savanna = SeasonsTestBridge.precipitation(level, savanna, pos);
+            GameTests.record("at 40 N, a jungle in Late Summer / a savanna in Early Spring; at 40 S the savanna",
+                    north40Jungle + " / " + north40Savanna + " / " + south40Savanna);
+            GameTests.assertTrue("at 40 N the jungle rains in Serene Seasons' tropical dry season and a savanna never does: the biome's own",
+                    north40Jungle == Biome.Precipitation.RAIN && north40Savanna == Biome.Precipitation.NONE
+                            && south40Savanna == Biome.Precipitation.NONE);
+            planetWith(pos.getZ(), 2);
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.LATE_SUMMER);
+            GameTests.assertTrue("at 2 N there is no dry season: the jungle rains all year, the savanna never does",
+                    SeasonsTestBridge.precipitation(level, jungle, pos) == Biome.Precipitation.RAIN
+                            && SeasonsTestBridge.precipitation(level, savanna, pos) == Biome.Precipitation.NONE);
+            planetWith(pos.getZ(), 40);
+            ClimateConfig.Test.hemisphereSeasons(false);
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.LATE_SUMMER);
+            GameTests.assertTrue("switched off: Serene Seasons' own dry season again at 40 N",
+                    SeasonsTestBridge.precipitation(level, jungle, pos) == Biome.Precipitation.NONE);
+            ClimateConfig.Test.hemisphereSeasons(true);
+
+            // Temperature: a tropical biome Serene Seasons would shift if it were not tropical (base 0.8 or less).
+            Holder<Biome> mangrove = SeasonsTestBridge.biome(level, Biomes.MANGROVE_SWAMP);
+            GameTests.assertTrue("a mangrove swamp is a tropical biome", SeasonsTestBridge.tropical(mangrove));
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.MID_WINTER);
+            float own = SeasonsTestBridge.ownTemperature(mangrove, pos);
+            float temperateWinter = SeasonsTestBridge.temperateTemperature(mangrove, pos, Season.SubSeason.MID_WINTER);
+            GameTests.record("a mangrove swamp, its own temperature / with Serene Seasons' Mid Winter shift", own + " / " + temperateWinter);
+            GameTests.assertTrue("Serene Seasons' Mid Winter would cool it", temperateWinter < own);
+            for (double latitude : new double[] {0, 15, 20, 22.5, 25, 40, 50, -40}) {
+                planetWith(pos.getZ(), latitude);
+                SereneSeasonsHemispheres.Here here = SeasonsTestBridge.here(level, pos);
+                double lat = here.latitude(), w = LatitudeSeasons.strength(lat, 45.0), x = LatitudeSeasons.temperateWeight(lat);
+                float seasonal = SeasonsTestBridge.temperateTemperature(mangrove, pos, LatitudeSeasons.shifted(Season.SubSeason.MID_WINTER, lat));
+                float neutral = SeasonsTestBridge.temperateTemperature(mangrove, pos, Season.SubSeason.MID_SUMMER);
+                float temperate = LatitudeSeasons.lerp(neutral, seasonal, w);
+                float expected = LatitudeSeasons.lerp(own, temperate, x);
+                float actual = SeasonsTestBridge.temperature(level, mangrove, pos);
+                GameTests.assertNear(String.format(Locale.ROOT, "a mangrove swamp at %.1f: own %.3f, temperate %.3f, share %.2f, Serene Seasons' temperature",
+                        lat, own, temperate, x), actual, expected, 1e-5);
+                if (x == 0.0)
+                    GameTests.assertNear("inside the wet/dry band a tropical biome has no temperature shift", actual, own, 1e-6);
+                if (Math.abs(lat) >= 24.99 && lat > 0)
+                    GameTests.assertTrue("beyond the band the mangrove swamp is cooled by the winter: " + actual + " < " + own, actual < own);
+                if (Math.abs(lat - 22.5) < 0.05)
+                    GameTests.assertTrue("at 22.5 the shift is between none and the temperate one: " + actual,
+                            actual < own && actual > temperate);
+            }
+        } finally {
+            ClimateConfig.Test.clear();
+            SeasonsTestBridge.setSeason(level, before);
+            swap.restore();
+        }
+        helper.succeed();
+    }
+
+    /**
+     * At {@code latitude} on the stand-in planet with the level in {@code season}: the sub-season decisions
+     * use is {@code discrete} (null: not checked), and the biome at {@code pos} lets wheat and carrots grow
+     * or not as given.
+     */
+    private static void checkTropical(ServerLevel level, BlockPos pos, String biome, double latitude, Season.SubSeason season,
+                                      Season.SubSeason discrete, boolean wheat, boolean carrots) {
+        SeasonsTestBridge.setSeason(level, season);
+        planetWith(pos.getZ(), latitude);
+        String at = String.format(Locale.ROOT, "%s, %s %.0f%s", biome, season, Math.abs(latitude), latitude < 0 ? "S" : "N");
+        SereneSeasonsHemispheres.Here here = SeasonsTestBridge.here(level, pos);
+        GameTests.record(at + ": seasons here", here.describe());
+        if (discrete != null)
+            GameTests.assertTrue(at + ": decisions use " + discrete + ", got " + here.discrete(), here.discrete() == discrete);
+        GameTests.assertTrue(at + ": wheat " + (wheat ? "grows" : "does not grow"), SeasonsTestBridge.fertile(WHEAT, level, pos) == wheat);
+        GameTests.assertTrue(at + ": carrots " + (carrots ? "grow" : "do not grow"), SeasonsTestBridge.fertile(CARROTS, level, pos) == carrots);
+    }
+
+    /**
+     * "Follow the sun": the tropical wet season is each hemisphere's summer half. At 15 degrees north
+     * Serene Seasons' tropical season is wet from Early Summer to Late Autumn and dry from Early Winter to
+     * Late Spring, at 15 degrees south the reverse; at northern midsummer it is wet in the north and dry
+     * in the south, at northern midwinter dry in the north and wet in the south. Precipitation in a
+     * savanna and a jungle (Serene Seasons' dry season takes the rain, its wet one rains on a desert's
+     * biome) agrees, in both hemispheres.
+     */
+    @GameTest(template = GameTests.TEMPLATE, timeoutTicks = 200, batch = "mic_climate_seasons_on")
+    public static void hemisphereTropicalWetSeasonFollowsTheSun(GameTestHelper helper) {
+        if (GameTests.skipWithout(helper, Compat.SERENE_SEASONS))
+            return;
+        runFollowTheSun(helper);
+    }
+
+    private static void runFollowTheSun(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = GameTests.centre(helper).above(2);
+        Season.SubSeason before = SeasonsTestBridge.subSeason(level);
+        SeasonsTestBridge.BiomeSwap swap = new SeasonsTestBridge.BiomeSwap(level, pos);
+        try {
+            ClimateConfig.Test.deepTimeEnabled(true);
+            ClimateConfig.Test.hemisphereSeasons(true);
+            swap.set(Biomes.SAVANNA);
+            Holder<Biome> savanna = SeasonsTestBridge.biome(level, Biomes.SAVANNA);
+            Holder<Biome> jungle = SeasonsTestBridge.biome(level, Biomes.JUNGLE);
+            StringBuilder north = new StringBuilder(), south = new StringBuilder();
+            for (Season.SubSeason s : Season.SubSeason.VALUES) {
+                SeasonsTestBridge.setSeason(level, s);
+                planetWith(pos.getZ(), 15);
+                SereneSeasonsHemispheres.Here n = SeasonsTestBridge.here(level, pos);
+                planetWith(pos.getZ(), -15);
+                SereneSeasonsHemispheres.Here so = SeasonsTestBridge.here(level, pos);
+                boolean northWet = LatitudeSeasons.wet(n.tropical()), southWet = LatitudeSeasons.wet(so.tropical());
+                north.append(s.ordinal()).append(northWet ? "W " : "d ");
+                south.append(s.ordinal()).append(southWet ? "W " : "d ");
+                boolean summerHalf = s.ordinal() >= Season.SubSeason.EARLY_SUMMER.ordinal()
+                        && s.ordinal() <= Season.SubSeason.LATE_AUTUMN.ordinal();
+                GameTests.assertTrue(s + ": at 15 N the tropical season is " + n.tropical() + (summerHalf ? ", wet" : ", dry"),
+                        northWet == summerHalf);
+                GameTests.assertTrue(s + ": at 15 S the tropical season is " + so.tropical() + (summerHalf ? ", dry" : ", wet"),
+                        southWet != summerHalf);
+            }
+            GameTests.record("tropical season by the level's sub-season (0 = Early Spring), 15 N (W wet, d dry)", north.toString().trim());
+            GameTests.record("the same at 15 S", south.toString().trim());
+
+            // Summer and winter themselves.
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.MID_SUMMER);
+            planetWith(pos.getZ(), 15);
+            GameTests.assertTrue("15 N in northern midsummer is wet", LatitudeSeasons.wet(SeasonsTestBridge.here(level, pos).tropical()));
+            planetWith(pos.getZ(), -15);
+            GameTests.assertTrue("15 S in northern midsummer (its midwinter) is dry", !LatitudeSeasons.wet(SeasonsTestBridge.here(level, pos).tropical()));
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.MID_WINTER);
+            planetWith(pos.getZ(), 15);
+            GameTests.assertTrue("15 N in northern midwinter is dry", !LatitudeSeasons.wet(SeasonsTestBridge.here(level, pos).tropical()));
+            planetWith(pos.getZ(), -15);
+            GameTests.assertTrue("15 S in northern midwinter (its midsummer) is wet", LatitudeSeasons.wet(SeasonsTestBridge.here(level, pos).tropical()));
+
+            // Precipitation reads the same calendar: Late Summer is the north's Mid Wet and the south's Mid Dry,
+            // Late Winter the north's Mid Dry and the south's Mid Wet (Serene Seasons' rule: Mid Wet rains on a
+            // savanna, Mid Dry takes a jungle's rain).
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.LATE_SUMMER);
+            planetWith(pos.getZ(), 15);
+            Biome.Precipitation northSavannaWet = SeasonsTestBridge.precipitation(level, savanna, pos);
+            Biome.Precipitation northJungleWet = SeasonsTestBridge.precipitation(level, jungle, pos);
+            planetWith(pos.getZ(), -15);
+            Biome.Precipitation southSavannaDry = SeasonsTestBridge.precipitation(level, savanna, pos);
+            Biome.Precipitation southJungleDry = SeasonsTestBridge.precipitation(level, jungle, pos);
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.LATE_WINTER);
+            Biome.Precipitation southSavannaWet = SeasonsTestBridge.precipitation(level, savanna, pos);
+            Biome.Precipitation southJungleWet = SeasonsTestBridge.precipitation(level, jungle, pos);
+            planetWith(pos.getZ(), 15);
+            Biome.Precipitation northSavannaDry = SeasonsTestBridge.precipitation(level, savanna, pos);
+            Biome.Precipitation northJungleDry = SeasonsTestBridge.precipitation(level, jungle, pos);
+            GameTests.record("precipitation (savanna / jungle): 15 N in Late Summer, 15 S in Late Summer, 15 S in Late Winter, 15 N in Late Winter",
+                    northSavannaWet + "/" + northJungleWet + ", " + southSavannaDry + "/" + southJungleDry + ", "
+                            + southSavannaWet + "/" + southJungleWet + ", " + northSavannaDry + "/" + northJungleDry);
+            GameTests.assertTrue("15 N in its wet season (Late Summer) rains on the savanna and the jungle",
+                    northSavannaWet == Biome.Precipitation.RAIN && northJungleWet == Biome.Precipitation.RAIN);
+            GameTests.assertTrue("15 S in its dry season (northern Late Summer) has no precipitation",
+                    southSavannaDry == Biome.Precipitation.NONE && southJungleDry == Biome.Precipitation.NONE);
+            GameTests.assertTrue("15 S in its wet season (northern Late Winter) rains on the savanna and the jungle",
+                    southSavannaWet == Biome.Precipitation.RAIN && southJungleWet == Biome.Precipitation.RAIN);
+            GameTests.assertTrue("15 N in its dry season (Late Winter) has no precipitation",
+                    northSavannaDry == Biome.Precipitation.NONE && northJungleDry == Biome.Precipitation.NONE);
+            // Off the planet Serene Seasons' own calendar: Late Winter is its Mid Wet.
+            ClimateConfig.Test.seasonTestPlanet(null);
+            GameTests.assertTrue("Serene Seasons alone: Late Winter is its Mid Wet, it rains on the savanna",
+                    SeasonsTestBridge.precipitation(level, savanna, pos) == Biome.Precipitation.RAIN);
+        } finally {
+            ClimateConfig.Test.clear();
+            SeasonsTestBridge.setSeason(level, before);
+            swap.restore();
+        }
+        helper.succeed();
+    }
+
+    /**
      * The two settings live in the world's server config, which NeoForge syncs to clients, and read
      * their defaults (on, 45 degrees) from it.
      */
@@ -378,6 +683,74 @@ public final class HemisphereSeasonsGameTests {
         } finally {
             ClimateConfig.Test.clear();
             SeasonsTestBridge.setSeason(level, before);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * Project Atmosphere's tropical wet/dry stage in a savanna agrees with Serene Seasons' tropical season
+     * ("Follow the sun"): at 15 N it is WET in northern midsummer and DRY in midwinter, at 15 S the
+     * reverse; it applies inside 22.5 degrees and gives way to the temperate stage beyond (40 N, 40 S).
+     */
+    @GameTest(template = GameTests.TEMPLATE, timeoutTicks = 100, batch = "mic_climate_seasons_pa")
+    public static void hemisphereAtmosphereWetDryFollowsTheSun(GameTestHelper helper) {
+        if (GameTests.skipWithout(helper, Compat.PROJECT_ATMOSPHERE))
+            return;
+        runAtmosphereWetDry(helper);
+    }
+
+    private static void runAtmosphereWetDry(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = GameTests.centre(helper).above(2);
+        Season.SubSeason before = SeasonsTestBridge.subSeason(level);
+        SeasonsTestBridge.BiomeSwap swap = new SeasonsTestBridge.BiomeSwap(level, pos);
+        try {
+            ClimateConfig.Test.deepTimeEnabled(true);
+            ClimateConfig.Test.hemisphereSeasons(true);
+            swap.set(Biomes.SAVANNA);
+            GameTests.assertTrue("a savanna is one of Serene Seasons' tropical biomes", SeasonsTestBridge.tropical(SeasonsTestBridge.biome(level, Biomes.SAVANNA)));
+            GameTests.assertTrue("the test position is a savanna", SeasonsTestBridge.biomeAt(level, pos).equals(Biomes.SAVANNA));
+            StringBuilder seen = new StringBuilder();
+            for (Season.SubSeason s : new Season.SubSeason[] {Season.SubSeason.MID_SUMMER, Season.SubSeason.MID_WINTER}) {
+                SeasonsTestBridge.setSeason(level, s);
+                boolean summer = s == Season.SubSeason.MID_SUMMER;
+                planetWith(pos.getZ(), 15);
+                String north = SeasonsAtmosphereTestBridge.regional(level, pos);
+                boolean northWet = LatitudeSeasons.wet(SeasonsTestBridge.here(level, pos).tropical());
+                planetWith(pos.getZ(), -15);
+                String south = SeasonsAtmosphereTestBridge.regional(level, pos);
+                boolean southWet = LatitudeSeasons.wet(SeasonsTestBridge.here(level, pos).tropical());
+                seen.append(s).append(": 15 N ").append(north).append(", 15 S ").append(south).append("; ");
+                GameTests.assertTrue(s + ": Project Atmosphere's savanna at 15 N is " + (summer ? "WET" : "DRY") + ", got " + north,
+                        north.endsWith(summer ? "/WET" : "/DRY"));
+                GameTests.assertTrue(s + ": Project Atmosphere's savanna at 15 S is " + (summer ? "DRY" : "WET") + ", got " + south,
+                        south.endsWith(summer ? "/DRY" : "/WET"));
+                GameTests.assertTrue(s + ": and it agrees with Serene Seasons' tropical season (north wet "
+                        + northWet + ", south wet " + southWet + ")", northWet == summer && southWet != summer);
+            }
+            GameTests.record("Project Atmosphere in a savanna, stage/moisture", seen.toString().trim());
+            SeasonsTestBridge.setSeason(level, Season.SubSeason.MID_SUMMER);
+            for (double lat : new double[] {22, -22, 23, -23, 40, -40, 2}) {
+                planetWith(pos.getZ(), lat);
+                String regional = SeasonsAtmosphereTestBridge.regional(level, pos);
+                boolean wetDry = !regional.endsWith("/NEUTRAL");
+                GameTests.record("Project Atmosphere in a savanna at " + lat + ", northern midsummer", regional);
+                GameTests.assertTrue("a savanna at " + lat + " has " + (Math.abs(lat) >= 7.5 && Math.abs(lat) <= 22.5 ? "" : "no ")
+                        + "wet/dry stage, got " + regional, wetDry == (Math.abs(lat) >= 7.5 && Math.abs(lat) <= 22.5));
+            }
+            // Beyond the band the stage is the temperate season of the hemisphere: summer in the north, winter in the south.
+            planetWith(pos.getZ(), 40);
+            GameTests.assertTrue("a savanna at 40 N in northern midsummer is in SUMMER", SeasonsAtmosphereTestBridge.regional(level, pos).startsWith("SUMMER/"));
+            planetWith(pos.getZ(), -40);
+            GameTests.assertTrue("a savanna at 40 S in northern midsummer is in WINTER", SeasonsAtmosphereTestBridge.regional(level, pos).startsWith("WINTER/"));
+        } catch (Throwable t) {
+            if (t instanceof RuntimeException r)
+                throw r;
+            throw new IllegalStateException(t);
+        } finally {
+            ClimateConfig.Test.clear();
+            SeasonsTestBridge.setSeason(level, before);
+            swap.restore();
         }
         helper.succeed();
     }
