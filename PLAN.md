@@ -627,6 +627,11 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
     opposite in every row (49.8 N is Mid Winter / Mid Summer in northern midwinter / midsummer, 49.8 S Mid Summer / Mid
     Winter); the north-south and east-west mirror images agree to 0.1 degree; the tropical wet/dry band, the temperate
     share and the season strength follow the new latitudes (e.g. 22.0 N: strength 0.48, Late Winter becomes Mid Spring in
-    the decisions). No Deep Time warnings in the log. Raw replies: `review-out/rcon.jsonl` (gitignored, on the VM).
+    the decisions). No Deep Time warnings in the log. Raw replies: `build/review-out/rcon.jsonl` (gitignored).
   - Not exercised in a game: the client colour code on a Petroff-Guyou planet (a client class cannot run on the server);
     its latitude comes through the same `PlanetLatitude.latitude(level, x, z)`, with x and z from Serene Seasons' resolver.
+- **2026-10-05 Ben's decision: merge, release, pack branch.** Asked whether to land the seasons work now that it handles the
+  Petroff-Guyou world, Ben answered, verbatim: **"Merge, release, pack branch (Recommended)"**. It supersedes the
+  2026-09-30 "The branch stays unmerged for now" (`plans/phase-09-hemisphere-seasons.md`). `seasons` was merged into
+  `master` (`merge --no-ff`); the release is built against Deep Time's pushed API 4 jar once Deep Time's master is on
+  origin, then a pack branch repins `mods/mic-climate.pw.toml` and Deep Time.

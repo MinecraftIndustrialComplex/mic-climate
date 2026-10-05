@@ -12,10 +12,10 @@
 #
 #   cd <deep-time> && tools/remote/mac.sh --pack -- true                      # sync Deep Time + the pack
 #   cd <deep-time> && tools/remote/mic-climate.sh --src <this checkout> --server \
-#       --pull review-out -- tools/planet-seasons-probe.sh [<deep-time dir on the VM>]
+#       --pull build/review-out -- tools/planet-seasons-probe.sh [<deep-time dir on the VM>]
 #
 # Needs build/libs/mic_climate-*.jar (./gradlew build) in this checkout. Results are copied to
-# review-out/: rcon.jsonl and report.md from Deep Time's smoke run, mixins.txt (the mod's log lines).
+# build/review-out/: rcon.jsonl and report.md from Deep Time's smoke run, mixins.txt (the mod's log lines).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 DT="${1:-/Volumes/Graphide/ban/mic/mods/deep-time}"
@@ -23,7 +23,7 @@ PRESET="${PRESET:-earthlike_quick_16k}"
 START="${START:-scattered_continents}"
 MICJAR="$(find "$HERE/build/libs" -maxdepth 1 -name 'mic_climate-*.jar' ! -name '*-sources.jar' | sort | tail -1)"
 [ -f "$MICJAR" ] || { echo "planet-seasons-probe: no mic-climate jar in $HERE/build/libs" >&2; exit 1; }
-OUT="$HERE/review-out"
+OUT="$HERE/build/review-out"
 mkdir -p "$OUT"
 
 # z rows north to south (north is -z; the equator is z = 0) and x columns across the 13312-block world.

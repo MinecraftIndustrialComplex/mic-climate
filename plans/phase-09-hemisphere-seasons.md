@@ -18,12 +18,16 @@ Deep Time's decisions log):
 
 Follow-up decisions (2026-09-30, after the first build): crops **"Let them grow year-round"** in the
 seasonless band; tropical wet/dry **"Exempt wet/dry"**; the two settings **"Server-synced"**; the
-full-season latitude stays 45°. The branch stays unmerged for now.
+full-season latitude stays 45°. The branch stays unmerged for now (superseded 2026-10-05, see below).
 
 Second follow-up decisions (2026-09-30): **"Temperate seasons there"** (Serene Seasons' tropical
 biomes follow the normal temperate seasons outside the wet/dry band, cross-fading over 20° to 25°,
 for everything Serene Seasons decides with its tropical rule: colours, crops, precipitation,
 temperature) and **"Follow the sun"** (the tropical wet season is each hemisphere's summer half).
+
+Third decision (2026-10-05, after the Petroff-Guyou latitude fix): asked whether to merge `seasons`, release
+and branch the pack, Ben answered, verbatim, **"Merge, release, pack branch (Recommended)"**. This supersedes
+"The branch stays unmerged for now".
 
 ## The model (`seasons.LatitudeSeasons`)
 
