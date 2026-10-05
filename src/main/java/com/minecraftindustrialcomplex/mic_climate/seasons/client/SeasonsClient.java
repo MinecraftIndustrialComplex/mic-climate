@@ -55,7 +55,7 @@ public final class SeasonsClient {
     private static final AtomicBoolean LOGGED_FAILURE = new AtomicBoolean();
 
     /** What the colours were last meshed with; client thread only. */
-    private record Planet(ClientLevel level, int circumference, boolean on, double fullLatitude) {}
+    private record Planet(ClientLevel level, int circumference, String projection, boolean on, double fullLatitude) {}
 
     private static Planet meshedWith;
 
@@ -82,7 +82,7 @@ public final class SeasonsClient {
             ClientLevel level = Minecraft.getInstance().level;
             if (level == null || biome == null)
                 return current;
-            double lat = PlanetLatitude.latitude(level, z);
+            double lat = PlanetLatitude.latitude(level, x, z);
             if (Double.isNaN(lat))
                 return current;
             ISeasonState global = SeasonHelper.getSeasonState(level);
@@ -123,15 +123,15 @@ public final class SeasonsClient {
             meshedWith = null;
             return;
         }
-        Planet now = new Planet(level, PlanetLatitude.circumference(level), PlanetLatitude.switchedOn(),
+        Planet now = new Planet(level, PlanetLatitude.circumference(level), PlanetLatitude.projection(level), PlanetLatitude.switchedOn(),
                 ClimateConfig.fullSeasonLatitude());
         Planet before = meshedWith;
         meshedWith = now;
         if (before == null || before.level() != level || before.equals(now))
             return;
         if (now.circumference() > 0 || before.circumference() > 0) {
-            MicClimate.LOGGER.info("Hemisphere seasons: re-meshing for planet circumference {} (was {}), {}",
-                    now.circumference(), before.circumference(), now.on() ? "on" : "off");
+            MicClimate.LOGGER.info("Hemisphere seasons: re-meshing for planet circumference {} (was {}), projection '{}' (was '{}'), {}",
+                    now.circumference(), before.circumference(), now.projection(), before.projection(), now.on() ? "on" : "off");
             mc.levelRenderer.allChanged();
         }
     }

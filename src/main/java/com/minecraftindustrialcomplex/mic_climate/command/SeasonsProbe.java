@@ -46,10 +46,10 @@ final class SeasonsProbe {
                 : LatitudeSeasons.temperateRule(lat) ? "temperate" : "no wet/dry cycle";
         SeasonsConfig.SeasonProperties melt = ModConfig.seasons.getSeasonProperties(here.discrete());
         return ClimateCommands.line("seasons", here.discrete().name(), String.format(Locale.ROOT,
-                "(%s; tropical wet/dry strength %.2f, temperate share %.2f, tropical biomes here: %s; SS temperature %.3f, level's %.3f, snow/ice below 0.15: %s; wheat %s, carrots %s; melt %.2f%% x%d; C %d, hooks %d/4)",
+                "(%s; tropical wet/dry strength %.2f, temperate share %.2f, tropical biomes here: %s; SS temperature %.3f, level's %.3f, snow/ice below 0.15: %s; wheat %s, carrots %s; melt %.2f%% x%d; C %d, projection %s, hooks %d/4)",
                 here.describe(), tropical, temperate, rule, t, levels, t < 0.15f ? "yes" : "no", fertile ? "grow" : "no",
                 offSeason ? "grow" : "no", melt.meltChance(), melt.meltRolls(), PlanetLatitude.circumference(level),
-                boundTargets()));
+                PlanetLatitude.projection(level).isEmpty() ? "-" : PlanetLatitude.projection(level), boundTargets()));
     }
 
     /** How many of the four server-side Serene Seasons classes the hemisphere-season mixins reached. */

@@ -102,7 +102,7 @@ public final class SereneSeasonsHemispheres {
                                          Operation<Float> inSeason) {
         double lat;
         try {
-            lat = pos == null ? Double.NaN : PlanetLatitude.latitude(level, pos.getZ());
+            lat = pos == null ? Double.NaN : PlanetLatitude.latitude(level, pos.getX(), pos.getZ());
         } catch (Throwable t) {
             logOnce(t);
             lat = Double.NaN;
@@ -170,7 +170,7 @@ public final class SereneSeasonsHemispheres {
         TropicalRule rule = null;
         if (pos != null) {
             try {
-                double lat = PlanetLatitude.latitude(level, pos.getZ());
+                double lat = PlanetLatitude.latitude(level, pos.getX(), pos.getZ());
                 if (!Double.isNaN(lat) && biome.is(ModTags.Biomes.TROPICAL_BIOMES)) {
                     rule = !LatitudeSeasons.wetDryRule(lat) ? TropicalRule.OFF
                             : LatitudeSeasons.south(lat) ? TropicalRule.SOUTH : TropicalRule.NORTH;
@@ -252,7 +252,7 @@ public final class SereneSeasonsHemispheres {
         if (!original || pos == null || tag != ModTags.Biomes.TROPICAL_BIOMES)
             return original;
         try {
-            double lat = PlanetLatitude.latitude(level, pos.getZ());
+            double lat = PlanetLatitude.latitude(level, pos.getX(), pos.getZ());
             if (Double.isNaN(lat))
                 return original;
             return !(LatitudeSeasons.seasonless(PlanetLatitude.strength(lat)) || LatitudeSeasons.temperateRule(lat));
@@ -263,7 +263,7 @@ public final class SereneSeasonsHemispheres {
     }
 
     private static boolean inSeasonlessBand(Level level, BlockPos pos) {
-        double lat = PlanetLatitude.latitude(level, pos.getZ());
+        double lat = PlanetLatitude.latitude(level, pos.getX(), pos.getZ());
         return !Double.isNaN(lat) && LatitudeSeasons.seasonless(PlanetLatitude.strength(lat));
     }
 
@@ -276,7 +276,7 @@ public final class SereneSeasonsHemispheres {
         if (global == null || pos == null)
             return global;
         try {
-            double lat = PlanetLatitude.latitude(level, pos.getZ());
+            double lat = PlanetLatitude.latitude(level, pos.getX(), pos.getZ());
             if (Double.isNaN(lat))
                 return global;
             double w = PlanetLatitude.strength(lat);
@@ -301,7 +301,7 @@ public final class SereneSeasonsHemispheres {
         if (pos == null || level == null)
             return colour;
         try {
-            double lat = PlanetLatitude.latitude(level, pos.getZ());
+            double lat = PlanetLatitude.latitude(level, pos.getX(), pos.getZ());
             if (Double.isNaN(lat))
                 return colour;
             int vanilla = FoliageColor.getBirchColor();
@@ -435,7 +435,7 @@ public final class SereneSeasonsHemispheres {
      */
     @Nullable
     private static Season.SubSeason localSubSeason(Level level, ChunkPos chunk, Season.SubSeason global) {
-        double lat = PlanetLatitude.latitude(level, chunk.getMiddleBlockZ());
+        double lat = PlanetLatitude.latitude(level, chunk.getMiddleBlockX(), chunk.getMiddleBlockZ());
         if (Double.isNaN(lat))
             return null;
         return LatitudeSeasons.discrete(global, lat, PlanetLatitude.strength(lat));
@@ -476,7 +476,7 @@ public final class SereneSeasonsHemispheres {
 
     public static Here here(Level level, BlockPos pos, ISeasonState global) {
         Season.SubSeason g = global.getSubSeason();
-        double lat = PlanetLatitude.latitude(level, pos.getZ());
+        double lat = PlanetLatitude.latitude(level, pos.getX(), pos.getZ());
         if (Double.isNaN(lat))
             return new Here(lat, 1.0, g, g, g, global.getTropicalSeason());
         double w = PlanetLatitude.strength(lat);

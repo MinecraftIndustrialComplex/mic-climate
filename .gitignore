@@ -15,3 +15,6 @@ smoke/
 # Atmosphere's licence forbids redistribution, so these stay local; see the
 # comments around the `libs/` lines in build.gradle for how to obtain them.
 libs/
+
+# Output of tools/planet-seasons-probe.sh.
+review-out/

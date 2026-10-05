@@ -96,7 +96,7 @@ public final class ProjectAtmosphereSeasons {
         if (!original || pos == null)
             return original;
         try {
-            double lat = PlanetLatitude.latitude(level, pos.getZ());
+            double lat = PlanetLatitude.latitude(level, pos.getX(), pos.getZ());
             return Double.isNaN(lat) || LatitudeSeasons.tropicalStrength(lat) >= LatitudeSeasons.TROPICAL_CUTOFF;
         } catch (Throwable t) {
             logOnce(t);
@@ -117,7 +117,7 @@ public final class ProjectAtmosphereSeasons {
             BlockPos pos = state.getPosition();
             if (overworld == null || pos == null)
                 return biomeMultiplier;
-            double lat = PlanetLatitude.latitude(overworld, pos.getZ());
+            double lat = PlanetLatitude.latitude(overworld, pos.getX(), pos.getZ());
             if (Double.isNaN(lat) || LatitudeSeasons.unchanged(lat, PlanetLatitude.strength(lat)))
                 return biomeMultiplier;
             float global = SeasonalAtmosphericDrift.sunlightMultiplier();
@@ -136,7 +136,7 @@ public final class ProjectAtmosphereSeasons {
         if (original == null || original == SeasonStage.NEUTRAL || pos == null)
             return original;
         try {
-            double lat = PlanetLatitude.latitude(level, pos.getZ());
+            double lat = PlanetLatitude.latitude(level, pos.getX(), pos.getZ());
             if (Double.isNaN(lat))
                 return original;
             ISeasonState local = SereneSeasonsHemispheres.discreteState(level, pos, SeasonHelper.getSeasonState(level));

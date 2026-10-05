@@ -298,7 +298,7 @@ public final class ClimateConfig {
                     "joins, so the colours a client draws follow the server."
             ).push("deepTime");
             builder.comment(
-                    "Serene Seasons' seasons by latitude on a Deep Time planet (latitude = -z * 360 / circumference).",
+                    "Serene Seasons' seasons by latitude on a Deep Time planet (the latitude is Deep Time's own, by its projection: on a Petroff-Guyou planet it depends on x and z).",
                     "Serene Seasons has one season per world, the northern one. With this on, south of the equator",
                     "its calendar runs half a year out, and the seasons fade smoothly toward the equator, where",
                     "there are none (Mid Summer, Serene Seasons' neutral season, all year, and every crop in season",

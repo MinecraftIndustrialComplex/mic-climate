@@ -27,7 +27,7 @@ temperature) and **"Follow the sun"** (the tropical wet season is each hemispher
 
 ## The model (`seasons.LatitudeSeasons`)
 
-Latitude is Deep Time's, φ = −z · 360° / C, with C the planet's circumference.
+Latitude is Deep Time's, by its projection (below: API 4; on a Lambert world φ = asin(−z / R), R = C / 2π).
 
 - **The south is half a year out.** South of the equator the temperate calendar is shifted by half
   a cycle: exactly six of Serene Seasons' twelve sub-seasons. The local boundaries therefore fall on
@@ -176,6 +176,31 @@ Time branch `climate-latitude-api` (not merged) adds, at `DeepTimeClimate.API_VE
 mic-climate reads it through `provider.DeepTimeSource.circumferenceBlocks` (still the only class that
 imports Deep Time). A Deep Time without API 2 answers `NoSuchMethodError`, logged once; the seasons
 then stay global everywhere, as before.
+
+## The seamless world: latitude by projection (Deep Time climate API 4)
+
+From Deep Time's world-data format 0.5 the default planet is the Petroff-Guyou world (an equal-area
+2:1 map, 13,312 x 6,656 blocks at 16k: an east-west slide on the x edges and half-turns on the north and
+south edges). Latitude there depends on x as well as z, so `-z * 360 / C` (and even Lambert's
+`asin(-z / R)`) is wrong. Deep Time's climate API 4 adds `latitudeDeg(Level, x, z)` (both sides,
+by the planet's projection, north positive, NaN off a planet) and `projectionKind(Level)`
+(`"petroff_guyou"`, `"lambert"` or `""`). mic-climate now:
+
+- asks `DeepTimeSource.latitudeDeg(level, x, z)` for every latitude (`PlanetLatitude.latitude` takes the
+  block's x and z; every caller passes both: the position, a chunk's middle, the colour resolvers' x and
+  z, a Project Atmosphere region's position);
+- falls back, for a Deep Time older than API 4 (a Lambert world whatever its version), to Deep Time's own
+  `latitudeDeg(z, circumference)` of API 2, and to the linear `-z * 360 / C` when even that is missing; each
+  missing method is logged once;
+- caches each thread's last 1,024 answers per level, since Deep Time's answer allocates a little on a
+  Petroff-Guyou world and the colour resolvers ask per block per biome-blend sample;
+- reads `projectionKind` for the probe line (`projection <kind>`) and the client's re-mesh trigger
+  (the planet becoming a different projection re-meshes, like a circumference change).
+
+Nothing else assumed the old shape: the seasons depend on latitude only (hemisphere = its sign, the
+equator is seasonless), and Project Atmosphere's regions are keyed by position. The poles of a
+Petroff-Guyou world are points on its long edges, not lines; the strength clamps at the full-season
+latitude, so nothing special happens there.
 
 ## Gating and failing safe
 
