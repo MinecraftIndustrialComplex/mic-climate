@@ -58,5 +58,5 @@ probe_all
 
 python3 tools/smoke/run.py --profile mic --fresh "${chunky[@]}" "${rc[@]}" --timeout 3600 || true
 cp smoke/mic/rcon.jsonl smoke/mic/report.md "$OUT/" 2>/dev/null || true
-grep -hE "Hemisphere seasons|hemisphere seasons|Deep Time|climate API" smoke/mic/server/logs/latest.log > "$OUT/mixins.txt" 2>/dev/null || true
+grep -hE "Hemisphere seasons|hemisphere seasons|Deep Time|climate API" smoke/mic/logs/server.log > "$OUT/mixins.txt" 2>/dev/null || true
 ls -la "$OUT"
