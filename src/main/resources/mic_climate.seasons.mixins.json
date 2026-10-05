@@ -1,0 +1,20 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.minecraftindustrialcomplex.mic_climate.mixin.seasons",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "com.minecraftindustrialcomplex.mic_climate.seasons.SeasonsMixinPlugin",
+  "mixins": [
+    "sereneseasons.SeasonHooksMixin",
+    "sereneseasons.ModFertilityMixin",
+    "sereneseasons.RandomUpdateHandlerMixin",
+    "sereneseasons.SeasonSensorBlockMixin",
+    "sereneseasonsplus.SnowAccumulationPolicyMixin"
+  ],
+  "client": [
+    "sereneseasons.ModClientMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

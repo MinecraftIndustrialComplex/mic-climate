@@ -12,7 +12,11 @@
     "CropStressManagerMixin",
     "ForecastGeneratorMixin",
     "SeasonHooksPrecipitationMixin",
+    "SereneSeasonsSeasonDelegateMixin",
     "AtmosphericUpdateSchedulerMixin"
+  ],
+  "client": [
+    "ClientTickHandlerMixin"
   ],
   "injectors": {
     "defaultRequire": 0

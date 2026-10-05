@@ -21,9 +21,11 @@ import java.util.Optional;
  *   <li>otherwise no date ({@code NaN}): the caller uses the annual mean.</li>
  * </ol>
  *
- * <p>Serene Seasons' seasons are global, so its own effects (leaf colours, crop seasons, its
- * snowfall shift) stay northern everywhere; only the temperature this mod reports follows the
- * hemisphere.
+ * <p>Serene Seasons' season is global, so this date is the same everywhere; Deep Time's months
+ * give each place its own season from it. Serene Seasons' own effects (leaf colours, crop seasons,
+ * its snowfall shift, melting) follow latitude only through the hemisphere seasons
+ * ({@code seasons.*}, phase 9), which shift the south by half a year and fade the seasons toward
+ * the equator.
  */
 public final class YearClock {
 

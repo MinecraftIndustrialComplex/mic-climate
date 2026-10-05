@@ -47,6 +47,11 @@ import java.util.Set;
  * {@code atmosphere.ProjectAtmosphereClientCache}) falls back to the original value on any
  * exception. Which part is active in a given world is decided at runtime.
  *
+ * <p>The same gate also fronts the hemisphere seasons' three mixins into Project Atmosphere
+ * ({@code atmosphere.ProjectAtmosphereSeasons}): its regional season, its sunlight and its falling
+ * leaves by latitude. They need the same Project Atmosphere versions and Deep Time, and each is
+ * checked the same way; at runtime they follow {@code deepTime.hemisphereSeasons} instead.
+ *
  * <p>Like {@code mixin.MicClimateMixinPlugin}, this runs during mixin preparation and touches none
  * of the mod's other classes (the constants it reads are inlined by {@code javac}). It lives outside
  * every mixin package on purpose: a class inside one may not be loaded once that package's config is
@@ -96,6 +101,15 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
     private static final Method APPLY_DELTAS = new Method("applyDeltas",
             "(Ljava/util/List;JLjava/lang/String;L" + PA + "modules/atmosphere/AtmosphericUpdateScheduler$UpdateMode;)V");
 
+    // The hemisphere seasons' mixins (atmosphere.ProjectAtmosphereSeasons), gated the same way.
+    private static final String LEVEL = "Lnet/minecraft/world/level/Level;";
+    private static final String SS_HELPER = "sereneseasons/api/season/SeasonHelper";
+    private static final String GET_SEASON_STATE = "(" + LEVEL + ")Lsereneseasons/api/season/ISeasonState;";
+    private static final Method DELEGATE_SNAPSHOT = new Method("snapshot", "(" + LEVEL + BLOCK_POS + ")L" + PA + "seasons/SeasonSnapshot;");
+    private static final Method DELEGATE_MOISTURE = new Method("moistureStage", "(" + LEVEL + BLOCK_POS + ")L" + PA + "seasons/SeasonMoistureStage;");
+    private static final Method BUILD_STATE_VIEW = new Method("buildStateView", "(" + REGION_KEY + "L" + PA
+            + "modules/atmosphere/RegionAtmosphereState;JJ)L" + PA + "modules/atmosphere/AtmosphericUpdateScheduler$StateView;");
+
     private static final Map<String, Needs> NEEDS = Map.of(
             "RegionAtmosphereStateMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(GET_TARGET, GET_EFFECTIVE_BASE, GET_BASELINE_MIN, GET_BASELINE_MAX,
@@ -125,13 +139,24 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
                     List.of(SEND_TO_PLAYER, COMPUTE_AVERAGES),
                     List.of(new Call(COMPUTE_AVERAGES, "net/neoforged/neoforge/network/PacketDistributor", "sendToAllPlayers",
                             "(" + PAYLOAD + "[" + PAYLOAD + ")V"))),
-            "AtmosphericUpdateSchedulerMixin", new Needs(PA_MOD, FOR_DESTROY,
-                    List.of(APPLY_DELTAS),
-                    List.of(new Call(APPLY_DELTAS, PA + "modules/atmosphere/RegionAtmosphereState", "adjustTemperature", "(F)V"))),
+            // Two hooks in one class: the hybrid pollution rule (Destroy) and the regional sunlight (Deep Time).
+            "AtmosphericUpdateSchedulerMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
+                    List.of(APPLY_DELTAS, BUILD_STATE_VIEW),
+                    List.of(new Call(APPLY_DELTAS, PA + "modules/atmosphere/RegionAtmosphereState", "adjustTemperature", "(F)V"),
+                            new Call(BUILD_STATE_VIEW, PA + "modules/atmosphere/RegionAtmosphereState", "getBiomeSunlightMultiplier", "()F"))),
             "SeasonHooksPrecipitationMixin", new Needs(SERENE_SEASONS_MOD, FOR_DEEP_TIME,
                     List.of(new Method("getPrecipitationAtSeasonal",
                             "(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/Holder;" + BLOCK_POS
                                     + ")Lnet/minecraft/world/level/biome/Biome$Precipitation;")),
+                    List.of()),
+            "SereneSeasonsSeasonDelegateMixin", new Needs(PA_MOD, FOR_DEEP_TIME,
+                    List.of(DELEGATE_SNAPSHOT, DELEGATE_MOISTURE),
+                    List.of(new Call(DELEGATE_SNAPSHOT, SS_HELPER, "getSeasonState", GET_SEASON_STATE),
+                            new Call(DELEGATE_MOISTURE, SS_HELPER, "getSeasonState", GET_SEASON_STATE),
+                            new Call(DELEGATE_MOISTURE, SS_HELPER, "usesTropicalSeasons", "(Lnet/minecraft/core/Holder;)Z"))),
+            "ClientTickHandlerMixin", new Needs(PA_MOD, FOR_DEEP_TIME,
+                    List.of(new Method("getCurrentSeason", "(Lnet/minecraft/client/multiplayer/ClientLevel;" + BLOCK_POS + ")L"
+                            + PA + "seasons/SeasonStage;")),
                     List.of())
     );
 

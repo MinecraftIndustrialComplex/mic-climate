@@ -2,6 +2,7 @@ package com.minecraftindustrialcomplex.mic_climate.command;
 
 import com.minecraftindustrialcomplex.mic_climate.Compat;
 import com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereBase;
+import com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereSeasons;
 import com.minecraftindustrialcomplex.mic_climate.config.ClimateConfig;
 import net.Gabou.projectatmosphere.api.AtmoApi;
 import net.Gabou.projectatmosphere.api.WeatherSnapshot;
@@ -51,6 +52,21 @@ final class AtmosphereProbe {
                         "(AtmoApi.getCurrentWeather)  region (%d, %d)  pollution inside %+.2f%s",
                         key.regionX(), key.regionZ(), pollution,
                         ProjectAtmosphereBase.pollutionActive(level) ? "" : " (pollution part off)"));
+    }
+
+    /**
+     * {@code pa-season : <regional stage> (region STAGE/MOISTURE (sunlight xN) vs level STAGE/MOISTURE ...)}:
+     * the season Project Atmosphere's regional drift uses at this block (the hemisphere seasons,
+     * {@code atmosphere.ProjectAtmosphereSeasons}) beside its level-wide one.
+     */
+    static String seasonsLine(ServerLevel level, BlockPos pos) {
+        try {
+            return ClimateCommands.line("pa-season",
+                    net.Gabou.projectatmosphere.seasons.SeasonTimeHelper.snapshot(level, pos).stage().name(),
+                    "(" + ProjectAtmosphereSeasons.describe(level, pos) + ")");
+        } catch (Throwable t) {
+            return ClimateCommands.line("pa-season", "-", "(" + t + ")");
+        }
     }
 
     /**

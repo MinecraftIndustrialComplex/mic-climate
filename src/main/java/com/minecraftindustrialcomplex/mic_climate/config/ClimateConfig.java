@@ -51,6 +51,13 @@ public final class ClimateConfig {
 
     public static final ModConfigSpec SPEC;
 
+    /**
+     * {@code serverconfig/mic_climate-server.toml} (per world): settings the client must share with the
+     * server. NeoForge sends a server config to every client when it joins, so clients colour leaves
+     * by the server's hemisphere seasons, not their own.
+     */
+    public static final ModConfigSpec SERVER_SPEC;
+
     private static ModConfigSpec.EnumValue<Source> SOURCE;
     private static ModConfigSpec.IntValue CACHE_TICKS;
     private static ModConfigSpec.EnumValue<PollutionMode> POLLUTION_MODE;
@@ -64,6 +71,8 @@ public final class ClimateConfig {
     private static ModConfigSpec.DoubleValue DEEP_TIME_MAX_ANOMALY;
     private static ModConfigSpec.BooleanValue DEEP_TIME_PA_BASE;
     private static ModConfigSpec.BooleanValue DEEP_TIME_PA_CLIENT;
+    private static ModConfigSpec.BooleanValue DEEP_TIME_HEMISPHERE_SEASONS;
+    private static ModConfigSpec.DoubleValue DEEP_TIME_FULL_SEASON_LATITUDE;
     private static ModConfigSpec.BooleanValue POWERGRID_ENABLED;
     private static ModConfigSpec.BooleanValue DESTROY_ENABLED;
     private static ModConfigSpec.BooleanValue LSO_ENABLED;
@@ -291,10 +300,42 @@ public final class ClimateConfig {
         });
 
         SPEC = pair.getRight();
+
+        Pair<Void, ModConfigSpec> server = new ModConfigSpec.Builder().configure(builder -> {
+            builder.comment(
+                    "Deep Time worlds (the deeptime mod). This file is per world and is sent to every client that",
+                    "joins, so the colours a client draws follow the server."
+            ).push("deepTime");
+            builder.comment(
+                    "Serene Seasons' seasons by latitude on a Deep Time planet (the latitude is Deep Time's own, by its projection: on a Petroff-Guyou planet it depends on x and z).",
+                    "Serene Seasons has one season per world, the northern one. With this on, south of the equator",
+                    "its calendar runs half a year out, and the seasons fade smoothly toward the equator, where",
+                    "there are none (Mid Summer, Serene Seasons' neutral season, all year, and every crop in season",
+                    "within about 8 degrees of it). Serene Seasons' tropical biomes keep their wet/dry cycle from 5",
+                    "to 25 degrees, strongest between 10 and 20, inverted in the south. It covers Serene Seasons'",
+                    "grass, foliage and birch colours, its biome temperature (snow, ice, rain or snow), crop fertility,",
+                    "melting and the season sensor; Serene Seasons Plus's snow policy; and Project Atmosphere's",
+                    "regional season (humidity, pressure, cloud water, sunlight, the tropical wet/dry stage) and",
+                    "falling leaves. Serene Seasons' own season, events and weather frequency stay the world's. This",
+                    "mixes into those mods (they have no per-position season API); each mixin is only applied to",
+                    "versions it was checked against. Worlds Deep Time did not generate are not affected."
+            );
+            DEEP_TIME_HEMISPHERE_SEASONS = builder.define("hemisphereSeasons", true);
+            builder.comment(
+                    "The latitude, in degrees, at and beyond which the temperate seasons have their full strength.",
+                    "Toward the equator they fade smoothly (a smoothstep: half strength at half this latitude) to",
+                    "none at the equator."
+            );
+            DEEP_TIME_FULL_SEASON_LATITUDE = builder.defineInRange("fullSeasonLatitude", 45.0, 1.0, 90.0);
+            builder.pop();
+            return null;
+        });
+        SERVER_SPEC = server.getRight();
     }
 
     public static void register(ModContainer container) {
         container.registerConfig(ModConfig.Type.COMMON, SPEC, "mic_climate-common.toml");
+        container.registerConfig(ModConfig.Type.SERVER, SERVER_SPEC, "mic_climate-server.toml");
     }
 
     /** {@code fallback.springOffset}, {@code fallback.dryOffset}, ... */
@@ -354,8 +395,20 @@ public final class ClimateConfig {
         private static volatile Boolean projectAtmosphereBase;
         private static volatile Float projectAtmosphereTestClimate;
         private static volatile Boolean pollutionProjectAtmosphere;
+        private static volatile Boolean hemisphereSeasons;
+        private static volatile TestPlanet seasonTestPlanet;
 
         private Test() {}
+
+        /**
+         * A stand-in Deep Time planet for the hemisphere seasons: every server level of the overworld
+         * counts as a planet of this circumference, with its equator at block {@code equatorZ}.
+         *
+         * @param circumference C in blocks; latitude is {@code -(z - equatorZ) * 360 / C}
+         * @param equatorZ      the z of the equator (0 on a real planet); a test moves it to put its
+         *                      own blocks in the north, on the equator or in the south
+         */
+        public record TestPlanet(int circumference, int equatorZ) {}
 
         /**
          * Pins the unified ambient to a fixed value, bypassing the provider.
@@ -460,6 +513,25 @@ public final class ClimateConfig {
             return ENABLED ? projectAtmosphereTestClimate : null;
         }
 
+        public static void hemisphereSeasons(Boolean value) {
+            check();
+            hemisphereSeasons = value;
+        }
+
+        /**
+         * Treat the overworld as a Deep Time planet of circumference {@code circumference} with its
+         * equator at {@code equatorZ} (see {@link TestPlanet}); {@code null} for no stand-in.
+         */
+        public static void seasonTestPlanet(TestPlanet planet) {
+            check();
+            seasonTestPlanet = planet;
+        }
+
+        /** @return the stand-in planet, or {@code null} for Deep Time's own */
+        public static TestPlanet seasonTestPlanet() {
+            return ENABLED ? seasonTestPlanet : null;
+        }
+
         /** Hands every setting back to the config file. Call from a test's finally. */
         public static void clear() {
             check();
@@ -478,6 +550,8 @@ public final class ClimateConfig {
             projectAtmosphereBase = null;
             projectAtmosphereTestClimate = null;
             pollutionProjectAtmosphere = null;
+            hemisphereSeasons = null;
+            seasonTestPlanet = null;
         }
 
         private static void check() {
@@ -604,6 +678,48 @@ public final class ClimateConfig {
     /** {@code deepTime.projectAtmosphereClient}: the per-player Deep Time client cache and its rain/snow. */
     public static boolean projectAtmosphereClient() {
         return !loaded() || DEEP_TIME_PA_CLIENT.get();
+    }
+
+    /**
+     * A {@code deepTime.hemisphereSeasons} set by {@code /mic_climate seasons} for this session, or
+     * {@code null} to use the file's value. Reachable in a normal game on purpose: comparing Serene
+     * Seasons' own season with the latitude's, in one running world, is what the switch is for. It
+     * lives in this JVM only: in singleplayer the client sees it too, while clients of a dedicated
+     * server keep the synced file value for their colours.
+     */
+    private static volatile Boolean hemisphereSeasonsOverride;
+
+    /** @param value on/off for this session, or {@code null} to follow the config file again */
+    public static void hemisphereSeasonsOverride(Boolean value) {
+        hemisphereSeasonsOverride = value;
+    }
+
+    /** @return the session override, or {@code null} when the file is in charge */
+    public static Boolean hemisphereSeasonsOverride() {
+        return hemisphereSeasonsOverride;
+    }
+
+    /**
+     * {@code deepTime.hemisphereSeasons} in the server config (synced to clients): Serene Seasons'
+     * seasons by latitude on Deep Time planets. Independent of {@link #deepTimeEnabled()}, which is a
+     * common setting a client cannot see. On by default, and before a world's server config is loaded.
+     */
+    public static boolean hemisphereSeasons() {
+        if (Test.hemisphereSeasons != null)
+            return Test.hemisphereSeasons;
+        if (hemisphereSeasonsOverride != null)
+            return hemisphereSeasonsOverride;
+        return !serverLoaded() || DEEP_TIME_HEMISPHERE_SEASONS.get();
+    }
+
+    /** {@code deepTime.fullSeasonLatitude} in the server config (synced to clients), degrees. */
+    public static double fullSeasonLatitude() {
+        return serverLoaded() ? DEEP_TIME_FULL_SEASON_LATITUDE.get() : 45.0;
+    }
+
+    /** Whether this side has a world's server config (the server's own, or the one a client received). */
+    public static boolean serverLoaded() {
+        return SERVER_SPEC.isLoaded();
     }
 
     /** {@code deepTime.maxAnomaly}, degrees Celsius. */

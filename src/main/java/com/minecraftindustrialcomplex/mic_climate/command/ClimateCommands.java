@@ -40,6 +40,7 @@ import java.util.Locale;
  * /mic_climate pollution &lt;0..1&gt;   set Destroy's greenhouse to a fraction of its maximum
  * /mic_climate mode [modifier|atmosphere|config]   read or set pollution.mode for this session (retired key)
  * /mic_climate atmosphere base [on|off|config]     read or set deepTime.projectAtmosphereBase for this session
+ * /mic_climate seasons [on|off|config]             read or set deepTime.hemisphereSeasons for this session
  * </pre>
  *
  * <p>Permission level 2 throughout: these read another mod's internals and two
@@ -116,6 +117,14 @@ public final class ClimateCommands {
             root.then(atmosphere);
         }
 
+        // deepTime.hemisphereSeasons for this session: Serene Seasons' own season against the
+        // latitude's, in one running world.
+        root.then(Commands.literal("seasons")
+                .executes(ClimateCommands::reportSeasons)
+                .then(Commands.literal("on").executes(ctx -> setSeasons(ctx, true)))
+                .then(Commands.literal("off").executes(ctx -> setSeasons(ctx, false)))
+                .then(Commands.literal("config").executes(ctx -> setSeasons(ctx, null))));
+
         dispatcher.register(root);
     }
 
@@ -165,7 +174,12 @@ public final class ClimateCommands {
         if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)) {
             lines.add(AtmosphereProbe.probeLine(level, pos));
             lines.add(AtmosphereProbe.baseLine(level, pos));
+            if (Compat.isLoaded(Compat.SERENE_SEASONS))
+                lines.add(AtmosphereProbe.seasonsLine(level, pos));
         }
+
+        if (Compat.isLoaded(Compat.SERENE_SEASONS))
+            lines.add(SeasonsProbe.probeLine(level, pos));
 
         if (Compat.isLoaded(Compat.DEEP_TIME))
             lines.addAll(DeepTimeProbe.probeLines(level, pos));
@@ -288,6 +302,27 @@ public final class ClimateCommands {
                 Locale.ROOT,
                 "mic_climate: deepTime.projectAtmosphereBase = %s (%s)",
                 ClimateConfig.projectAtmosphereBase(),
+                value == null ? "session override cleared" : "session override")), true);
+        return 1;
+    }
+
+    private static int reportSeasons(CommandContext<CommandSourceStack> ctx) {
+        Boolean override = ClimateConfig.hemisphereSeasonsOverride();
+        ctx.getSource().sendSuccess(() -> Component.literal(String.format(
+                Locale.ROOT,
+                "mic_climate: deepTime.hemisphereSeasons = %s (%s), full-season latitude %.1f",
+                ClimateConfig.hemisphereSeasons(),
+                override == null ? "from the world's mic_climate-server.toml" : "session override",
+                ClimateConfig.fullSeasonLatitude())), false);
+        return 1;
+    }
+
+    private static int setSeasons(CommandContext<CommandSourceStack> ctx, Boolean value) {
+        ClimateConfig.hemisphereSeasonsOverride(value);
+        ctx.getSource().sendSuccess(() -> Component.literal(String.format(
+                Locale.ROOT,
+                "mic_climate: deepTime.hemisphereSeasons = %s (%s; clients of a dedicated server keep the synced file value for colours)",
+                ClimateConfig.hemisphereSeasons(),
                 value == null ? "session override cleared" : "session override")), true);
         return 1;
     }

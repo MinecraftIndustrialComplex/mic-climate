@@ -275,6 +275,9 @@ Recommendation: move; the pack always ships both.
 | `powergrid.enabled` / `destroy.enabled` / `lso.enabled` / `crowns.enabled` | true | per-bridge switches |
 | `lso.neutralCelsius`, `lso.unitsPerDegree` | 20, 0.24 | world modifier mapping |
 | `lso.deviceHeat.enabled`, `.tempScalar`, `.rangeScalar` | true, 0.04, 0.5 | device proximity heat |
+| `deepTime.enabled`, `.weatherAnomaly`, `.maxAnomaly` | true, true, 20 | phase 7: Deep Time's climate as the base |
+| `deepTime.projectAtmosphereBase` | true | phase 8: Deep Time's climate as Project Atmosphere's base |
+| `deepTime.hemisphereSeasons`, `.fullSeasonLatitude` (the world's `mic_climate-server.toml`, synced to clients) | true, 45 | phase 9: seasons by latitude on Deep Time planets |
 
 ## 8. Licensing
 
@@ -288,7 +291,14 @@ Recommendation: move; the pack always ships both.
   at the same sites in every world, so those mixins also apply with Destroy installed, plus its
   forecast sender (the per-player Deep Time client table) and, in Serene Seasons, the client's
   rain-or-snow answer. Its jar stays a `compileOnly` input in the gitignored `libs/`. Ben is
-  asking its author for consent on its Discord.
+  asking its author for consent on its Discord. Phase 9's hemisphere seasons (Ben's "Patch PA per position", 2026-09-30) add
+  three more mixins there under the same gate.
+- Serene Seasons (Glitchfiend) and Serene Seasons Plus (Gabou), both "All Rights Reserved": phase 9
+  (`plans/phase-09-hemisphere-seasons.md`, Ben's decisions of 2026-09-30) mixes into five Serene
+  Seasons classes and one Serene Seasons Plus class at runtime, in their own config, only for
+  versions they were checked against and only with Deep Time installed, and uses Serene Seasons'
+  resolver-override hook for colours. Nothing of either is copied or redistributed; the pinned jars
+  are `compileOnly` inputs in the gitignored `libs/`.
 - LSO all-rights-reserved: we compile against its `api`/`registry` classes (intended for
   integrations, and Project Atmosphere does the same). Do not ship any LSO code. Ask the author if
   publishing beyond the pack.
@@ -547,3 +557,137 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
   - **Normal-world demo** (no player, Project Atmosphere driven, so every region is passive), °C (PA air / unified):
     clean 11.61 / 11.61; polluted +20 before Project Atmosphere moved 11.61 / 31.61; driven 1200 ticks 30.07 / 31.83;
     2400 more 31.97 / 31.99; sky cleared and driven 1200 ticks 13.87 / 11.75.
+- **2026-09-30 phase 9 (seasons by latitude on Deep Time planets) built on branch `seasons`** — Ben's decisions
+  (Deep Time decisions log, 2026-09-30): code in mic-climate, "full latitude damping", Project Atmosphere patched
+  per position, Serene Seasons Plus snow patched. Design, hooks, gating and limits:
+  `plans/phase-09-hemisphere-seasons.md`. Needs Deep Time's climate API 2 (branch `climate-latitude-api`, not
+  merged: `DeepTimeClimate.circumferenceBlocks(Level)` on both sides, `latitudeDeg`).
+  - **GameTests** (Mac, `tools/remote/mic-climate.sh`): `./gametest.sh` 28/28 (7 skip: no Project Atmosphere or
+    Serene Seasons Plus, 2 client-only) and `-PwithAtmosphere` 28/28. Serene Seasons is now the pack's own pin
+    (10.1.0.3 from CurseForge, `libs/`) at compile and test time; the mixins bind 4/4 (Serene Seasons, server),
+    1/1 (Serene Seasons Plus), 2/2 (Project Atmosphere, server).
+  - **Real Deep Time planet** (MIC server, earthlike_quick_16k, scattered continents, 500 Myr, C = 16384; Deep Time
+    `climate-latitude-api`; Deep Time's `tools/review/seasons-probe.sh`): a grid of 32 places at 45 N, 15 N, the
+    equator and 45 S; most are sea, the land ones are below. The Mixin export shows every server injector landed
+    in its target (`review/out/seasons/injections.txt` in Deep Time). Northern midwinter / northern midsummer:
+
+    | Site | Lat., strength | Serene Seasons here (decisions) | SS temperature (level's) | Snow/ice (< 0.15) | Wheat | Melt | PA region season, sunlight | PA snow/freeze °C |
+    |---|---|---|---|---|---|---|---|---|
+    | Dfb, `terralith:yellowstone` (−3072, −2048) | 45.0 N, 1.00 | Mid Winter / Mid Summer | −0.50 (−0.50) / 0.25 (0.25) | yes / no | no / yes | 0 / 25 % | winter ×0.73 / summer ×1.08 | −9.6 / 16.1 |
+    | Cfa, `terralith:birch_taiga` (−7168, −683) | 15.0 N, 0.26 | Late Spring / Mid Summer | 0.03 (−0.50) / 0.22 (0.22) | yes¹ / no | no / yes | 12.5 / 25 % | spring ×0.95 / summer ×1.08 | 18.3 / 25.0 |
+    | Af, `bamboo_jungle` (−7168, 0) | 0.0, 0.00 | Mid Summer / Mid Summer | 0.95 (0.95)² / 0.95 | no / no | yes / yes | 25 / 25 % | summer ×1.08 / summer ×1.08 | 25.2 / 25.2 |
+    | sea, `terralith:deep_warm_ocean` (−5120, 0) | 0.0, 0.00 | Mid Summer / Mid Summer | 0.50 (−0.30) / 0.50 (0.50) | no / no | yes / yes | 25 / 25 % | summer / summer | 26.3 / 26.6 |
+    | Cfb, `old_growth_birch_forest` (−3072, 2048) | 45.0 S, 1.00 | Mid Summer / Mid Winter | 0.60 (−0.20) / −0.20 (0.60) | no / yes | yes / no | 25 / 0 % | summer ×1.08 / winter ×0.73 | 16.1 / 3.0 |
+    | same, `/mic_climate seasons off`, midwinter | — | Mid Winter | −0.20 | yes | no | 0 % | winter ×0.73 | 16.1 |
+
+    ¹ Terralith's birch taiga is a cold biome to Serene Seasons (0.22 even in its summer), so it stays under 0.15 at
+    15° in winter though faded from −0.50 to 0.03; the biome, not the season. ² Serene Seasons' tropical biomes take
+    no temperature shift. The equator is seasonless (Mid Summer all year, wheat all year, no winter cooling in either
+    season); the south is inverted in every column; at 15 N the season is faded (Late Spring in midwinter). Project
+    Atmosphere's level-wide season stayed winter / summer throughout. Its snow/freeze temperature is Deep Time's
+    (phase 8), which already had each hemisphere's season.
+  - **Pack smoke** (`smoke/install.sh` + `run.py`, the pack's HEAD snapshot, 166 mods, no Deep Time): **20/20**; the
+    log says "Hemisphere seasons not applied: Deep Time is not installed". (The pack's working tree on the Mac failed
+    packwiz's hash check for `destroy_metallurgy_integration.js`, a peer's uncommitted edit, so the run used Deep
+    Time's re-indexed HEAD snapshot through `MIC_PACK`.)
+  - **Real client** (Deep Time's `tools/client/mac-screenshots.sh` on the Mac's desktop; Deep Time
+    `climate-latitude-api`, Toroidal World, Serene Seasons 10.1.0.3, GlitchCore, Thermoo, Forgified Fabric API and
+    this jar, as `-PrunSet=seasons-client`; the same planet, Serene Seasons starting at Mid Autumn): forest at
+    41.5° N (−3008, −1888) and birch forest at 40.8° N (−2912, −1856) are autumn orange, forest at 44.3° S (−3008,
+    2016) and birch forest at 45° S (−2976, 2048) are spring green, in the same world at the same moment; spruce
+    stays evergreen. The planet info arrived before the first chunks were meshed, so the re-mesh trigger had
+    nothing to do (not exercised). Screenshots: Deep Time `review/out/seasons-client2/11-vista-{0..3}.png`.
+  - **Deep Time GameTests** (`climate-latitude-api`, `./gametest.sh`): 51/52; `climateApiIsEmptyElsewhere` passes
+    with the new checks (API 2, the synthetic planet's C = 1024 from the generator, 0 elsewhere, latitude); the one
+    failure, `climateConsistent` (Köppen families below their floor on the baked test planet), touches no code the
+    branch changed.
+- **2026-09-30 phase 9 follow-up** (Ben's answers; `seasons` stays unmerged): crops grow year-round in the
+  seasonless band (≤ 1/12 strength, about 7.9°), tropical biomes there included; the tropical wet/dry cycle keeps
+  its own band (0 within 5°, full 10–20°, 0 beyond 25°, inverted south) for Serene Seasons' tropical colours and
+  Project Atmosphere's wet/dry stage (7.5–22.5°); `deepTime.hemisphereSeasons` and `deepTime.fullSeasonLatitude`
+  moved to the world's server config (synced to clients), no longer tied to `deepTime.enabled`.
+  - GameTests 29/29 with and without Project Atmosphere; pack smoke 20/20 (not applied without Deep Time).
+  - Planet probe (same preset, Deep Time `climate-latitude-api`, today's pack 790e116): every server injector
+    landed, the new fertility ones included. At the equator (`bamboo_jungle`, `tropical_jungle`, both Serene
+    Seasons tropical biomes) wheat and carrots grow in northern midwinter and midsummer alike; at 15 N (tropical
+    strength 1) `savanna` keeps Serene Seasons' tropical crop rule (wheat, not carrots) and Project Atmosphere's
+    wet/dry stage (WET in the level's midwinter, DRY in its midsummer, Serene Seasons' own tropical calendar),
+    while temperate biomes there are in Late Spring (carrots grow) in midwinter; 45 S (`taiga`, `lush_valley`)
+    is in summer during the northern winter and in winter during the northern summer, and reads Mid Winter with
+    the switch off.
+- **2026-09-30 phase 9 second follow-up** (Ben's decisions, Deep Time decisions log 2026-09-30; `seasons` stays
+  unmerged): **"Temperate seasons there"** and **"Follow the sun"**. Design: `plans/phase-09-hemisphere-seasons.md`
+  ("Tropical biomes beyond the wet/dry band", "The wet season follows the sun").
+  - *Temperate seasons there.* Serene Seasons' tropical biomes (its `tropical_biomes` tag) follow the normal
+    temperate seasons outside the wet/dry band, cross-fading over 20-25° (`LatitudeSeasons.temperateWeight`; full
+    wet/dry at 20°, full temperate at 25° and beyond, both hemispheres, the south inverted as elsewhere). Colours
+    (grass, foliage, birch: `SeasonsClient`, `SereneSeasonsHemispheres.birchColour`, `LatitudeSeasons.tropicalBiomeColour`)
+    and the biome temperature (`SeasonHooksMixin`, a thread-local tropical rule) blend continuously; crop fertility
+    (`cropBiomeTag`: the summer-crops-only rule gives way to the temperate crop seasons), precipitation (new wraps in
+    `SeasonHooksMixin` on `getPrecipitationAtSeasonal` / `hasPrecipitationSeasonal`) and Project Atmosphere's stage
+    switch at 22.5°. Inside the band they keep wet/dry. Three new `SeasonHooksMixin` injectors (still one mixin
+    class per target, still 4 Serene Seasons classes bound; the plugin's checks cover the new methods and calls).
+  - *Follow the sun.* Serene Seasons' tropical calendar is wet from Early Winter to Late Spring, the southern
+    tropics' wet season on Earth. Now the south keeps it and the north's is moved half a cycle
+    (`LatitudeSeasons.shiftTropical`, one function every reader goes through): at 15° N wet from Early Summer to Late
+    Autumn, dry from Early Winter to Late Spring, at 15° S the reverse. Colours, Project Atmosphere's WET/DRY stage
+    (through the local season state) and the new precipitation hook agree. Near the equator (inside 7.5°) there is no
+    wet/dry cycle, so a jungle there now rains all year (Serene Seasons' level-wide dry season no longer applies on a
+    planet; the tropical dry season was a documented limit before).
+  - **GameTests** (Mac, `tools/remote/mic-climate.sh`): `./gametest.sh` **32/32** (10 skip: Project Atmosphere,
+    Serene Seasons Plus, 2 client-only) and `-PwithAtmosphere` **32/32** (2 skip, client-only); 3 new tests, the
+    arithmetic test extended; the mixins still bind 4/4, 1/1, 2/2. Server-side evidence from the log: savanna and
+    desert at 40 N / 40 S in northern midwinter / midspring / midsummer decide as winter / spring / summer (the south
+    inverted), wheat and carrots follow the temperate crop seasons where Serene Seasons alone grows wheat in all seasons
+    and carrots never; the crop rule flips between 22° and 23° in both hemispheres; a jungle rains and a savanna does
+    not at 40°; a mangrove swamp (base 0.8, tropical) has its own temperature 0.800 inside 20°, 0.600 at 22.5°, 0.334
+    at 25°, 0.028 at 40°, 0.000 at 50° and 0.800 at 40 S (the northern winter); the tropical season at 15 N is wet from
+    sub-season 3 to 8 and dry otherwise, at 15 S the reverse, for all twelve sub-seasons; precipitation agrees; Project
+    Atmosphere in a savanna: 15 N SUMMER/WET in northern midsummer and SPRING/DRY in midwinter, 15 S the reverse, wet/dry
+    stage at 22° and none at 23° (both hemispheres), SUMMER at 40 N and WINTER at 40 S beyond the band. **Not exercised
+    in a game:** the client colour code (a client class cannot run on the dedicated server): its arithmetic is tested
+    (15° and 20°: wet/dry colour; 22.5°: between; 25° and beyond: the temperate colour at the temperate strength); the
+    real-client screenshots of the first phase 9 build were not repeated.
+  - GameTest biome note: `Level.getBiome` zooms through a hash of the block over the cells around it, so the tests
+    set the 3x3x3 biome cells around the test block (`SeasonsTestBridge.BiomeSwap`); one cell worked by luck in the
+    first run, not in the next.
+  - **Pack smoke** (the earlier run's installed server, 166 mods, no Deep Time, this jar over the pack's copy; the
+    pack's working tree is not used: a peer has uncommitted edits in it): **20/20**; the log says "Hemisphere seasons
+    not applied: Deep Time is not installed". The Mac mirror's generated `smoke/tools.env`, `rcon.pw` and
+    `neoforge.version` had been removed by the sync's `--delete` and were regenerated by hand.
+  - Deep Time planet probe skipped on purpose (the Mac's single server slot).
+- **2026-10-05 the seamless (Petroff-Guyou) world** (Deep Time master 6489d4a5, climate API 4; `seasons` stays unmerged,
+  Ben's 2026-09-30 decision; design: `plans/phase-09-hemisphere-seasons.md` "The seamless world"). The latitude was
+  `-z * 360 / C`, which is wrong on a Petroff-Guyou world (latitude depends on x and z; the world is 13,312 x 6,656
+  blocks at 16k, and `circumferenceBlocks` is its x period, 13,312) and was already a few degrees off on a Lambert one
+  (linear, not `asin`). `PlanetLatitude.latitude(level, x, z)` now asks `DeepTimeClimate.latitudeDeg(level, x, z)`
+  through `DeepTimeSource`; fallbacks for a Deep Time without API 4 (Lambert: its own `latitudeDeg(z, C)`, then the
+  linear formula); a per-thread column cache; the probe line and the client re-mesh trigger carry `projectionKind`.
+  No other code assumed the old shape (nothing used distances to poles, wrap periods or z signs).
+  - **Build** (test VM, `tools/remote/mic-climate.sh --deeptime-jar` the jar built from Deep Time 6489d4a5, API_VERSION 4):
+    `./gradlew build` green. **GameTests** `./gametest.sh`: **32/32** (the stand-in planet, no Deep Time on that classpath;
+    the mixins bind).
+  - **Real Petroff-Guyou planet** (`tools/planet-seasons-probe.sh`: MIC pack + this jar + Deep Time 6489d4a5,
+    `earthlike_quick_16k`, scattered continents, 500 Myr; the probe line says `C 13312, projection petroff_guyou, hooks 4/4`;
+    5 longitudes x 7 latitude rows, northern midwinter and midsummer). Latitude (N+ / S-) by z, for x = -6000, -3000, 0, 3000, 6000:
+
+    | z | latitude | old formula |
+    |---|---|---|
+    | -3000 | 49.8, 78.1, 40.7, 78.2, 49.8 N | 81.1 N at every x |
+    | -1500 | 22.0, 33.9, 20.7, 33.9, 22.0 N | 40.6 N |
+    | -500 | 7.3, 10.8, 7.0, 10.8, 7.3 N | 13.5 N |
+    | 0 | 0.0 at every x | 0 |
+    | 500 / 1500 / 3000 | the same numbers south | |
+
+    The equator (z = 0) is seasonless in all five columns (strength 0.00, Mid Summer in both seasons); the hemispheres are
+    opposite in every row (49.8 N is Mid Winter / Mid Summer in northern midwinter / midsummer, 49.8 S Mid Summer / Mid
+    Winter); the north-south and east-west mirror images agree to 0.1 degree; the tropical wet/dry band, the temperate
+    share and the season strength follow the new latitudes (e.g. 22.0 N: strength 0.48, Late Winter becomes Mid Spring in
+    the decisions). No Deep Time warnings in the log. Raw replies: `build/review-out/rcon.jsonl` (gitignored).
+  - Not exercised in a game: the client colour code on a Petroff-Guyou planet (a client class cannot run on the server);
+    its latitude comes through the same `PlanetLatitude.latitude(level, x, z)`, with x and z from Serene Seasons' resolver.
+- **2026-10-05 Ben's decision: merge, release, pack branch.** Asked whether to land the seasons work now that it handles the
+  Petroff-Guyou world, Ben answered, verbatim: **"Merge, release, pack branch (Recommended)"**. It supersedes the
+  2026-09-30 "The branch stays unmerged for now" (`plans/phase-09-hemisphere-seasons.md`). `seasons` was merged into
+  `master` (`merge --no-ff`); the release is built against Deep Time's pushed API 4 jar once Deep Time's master is on
+  origin, then a pack branch repins `mods/mic-climate.pw.toml` and Deep Time.

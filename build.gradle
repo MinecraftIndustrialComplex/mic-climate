@@ -162,9 +162,22 @@ dependencies {
     // compatible addons but forbids redistribution and modified builds.
     compileOnly(files("${project.projectDir}/libs/NeoForge-projectatmosphere-${project_atmosphere_version_number}.jar"))
     compileOnly("maven.modrinth:create-crowns:${crowns_version}")
-    // Serene Seasons' public API (sereneseasons.api.season): the date Deep Time's monthly climate
-    // is read at (provider.SereneSeasonsClock). Optional at runtime.
-    compileOnly("maven.modrinth:serene-seasons:${sereneseasons_version}")
+    // Serene Seasons: its public API (sereneseasons.api.season) is the date Deep Time's monthly climate
+    // is read at (provider.SereneSeasonsClock), and the hemisphere seasons (seasons.*,
+    // mixin.seasons) mix into its internals and call its colour helpers. Optional at runtime. All
+    // Rights Reserved, so compileOnly against the pack's own pin, kept in the gitignored libs/:
+    // SereneSeasons-neoforge-1.21.1-10.1.0.3.jar, CurseForge file 6182596, sha1
+    // 8b9034d4c43f880b1f1ebdd3943219de0b0bc4c5 (the Modrinth upload of 10.1.0.3 is a different
+    // file, and Modrinth's newest is 10.1.0.8/.9). Never bundled or redistributed.
+    compileOnly(files("${project.projectDir}/libs/SereneSeasons-neoforge-1.21.1-${sereneseasons_version_number}.jar"))
+    // GlitchCore: Serene Seasons' config and event classes extend its types, so javac needs it to see
+    // their members. compileOnly; the pack ships it.
+    compileOnly("maven.modrinth:glitchcore:${glitchcore_version}")
+    // Serene Seasons Plus: the hemisphere seasons' GameTest reads its snow policy
+    // (gametest.SeasonsSnowPlusTestBridge); its mixin names it by string only. All Rights Reserved;
+    // the pack's pin, byte-identical to Modrinth nYao5aRK (sha1 13d356654676b83694c8ad78f45e2cd5dd8a93e0),
+    // kept in libs/ as NeoForge-Version-Serene Seasons Plus-1.21.1-5.1.2.jar. Never bundled.
+    compileOnly(files("${project.projectDir}/libs/NeoForge-Version-Serene Seasons Plus-1.21.1-${sereneseasons_plus_version_number}.jar"))
     // Deep Time's public climate API (com.minecraftindustrialcomplex.deeptime.api.climate), read by
     // provider.DeepTimeSource in Deep Time worlds. compileOnly and optional at runtime: without Deep
     // Time the class is never loaded. Deep Time is not on a maven; build it (its neoforge/ module,
@@ -186,7 +199,9 @@ dependencies {
     // event, which is what BiomeSeasonFallback reads.
     localRuntime("maven.modrinth:thermoo-patches:${thermoo_patches_version}")
     localRuntime("maven.modrinth:yacl:${yacl_version}")
-    localRuntime("maven.modrinth:serene-seasons:${sereneseasons_version}")
+    // The pack's pin, the same file the compileOnly line above reads (not Modrinth's 10.1.0.8), so the
+    // GameTests bind the hemisphere seasons' mixins to the Serene Seasons the pack actually runs.
+    localRuntime(files("${project.projectDir}/libs/SereneSeasons-neoforge-1.21.1-${sereneseasons_version_number}.jar"))
     localRuntime("maven.modrinth:glitchcore:${glitchcore_version}")
     // Gabou's Libs is CurseForge-only, so there is no maven coordinate for it;
     // the file here is byte-identical to pack/mods/gabous-libs.pw.toml
@@ -243,7 +258,7 @@ dependencies {
     // the same Compat.isLoaded guard the mod uses when it is not here.
     if (project.hasProperty('withAtmosphere')) {
         // The pack's own pin, and what Project Atmosphere 0.9.1.2 asks for.
-        localRuntime("maven.modrinth:serene-seasons-plus:${sereneseasons_plus_version}")
+        localRuntime(files("${project.projectDir}/libs/NeoForge-Version-Serene Seasons Plus-1.21.1-${sereneseasons_plus_version_number}.jar"))
         // Hard dependency of Project Atmosphere ([0.7.3,)). Kept out of the
         // default set because without Project Atmosphere it is actively harmful
         // on a client: CloudSpawningDataManager.getInstance() throws "Not

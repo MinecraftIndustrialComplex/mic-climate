@@ -25,11 +25,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>Loaded lazily from {@link UnifiedEnvironmentProvider} behind a
  * {@code Compat.isLoaded("deeptime")} guard, so without Deep Time the JVM never resolves these
  * imports. Server side only: Deep Time keeps its world data on the server, and on a client level
- * (or any level Deep Time did not generate) this answers {@code null}.
+ * (or any level Deep Time did not generate) this answers {@code null}. The exception is the
+ * planet's geometry ({@link #circumferenceBlocks}), which Deep Time's client knows too and which the
+ * hemisphere seasons ({@code seasons.PlanetLatitude}) read on both sides.
  */
 public final class DeepTimeSource {
 
     private static final AtomicBoolean LOGGED_FAILURE = new AtomicBoolean();
+    /** Set once Deep Time turned out to predate climate API 2 (no geometry): never ask again. */
+    private static volatile boolean noGeometryApi;
+    /** Set once Deep Time turned out to predate climate API 4 (no latitude by x and z): never ask again. */
+    private static volatile boolean noLatitudeApi;
+    /** Set once Deep Time turned out to predate climate API 2's latitude by circumference. */
+    private static volatile boolean noLatitudeByCircumference;
 
     private DeepTimeSource() {}
 
@@ -172,9 +180,98 @@ public final class DeepTimeSource {
                 r.meanC(), r.warmestC(), r.coldestC(), r.precipMm(), r.elevationM());
     }
 
+    /**
+     * The circumference, in blocks, of the Deep Time planet {@code level} is, on either side (Deep
+     * Time's climate API 2: the generator's on the server, the planet info the server sent on a
+     * client), or 0: not a planet, no info yet, or a Deep Time older than API 2 (logged once, then
+     * never asked again). Allocation-free; colour resolvers call it from mesh threads.
+     */
+    public static int circumferenceBlocks(Level level) {
+        if (noGeometryApi)
+            return 0;
+        try {
+            return DeepTimeClimate.circumferenceBlocks(level);
+        } catch (LinkageError e) {
+            noGeometryApi = true;
+            MicClimate.LOGGER.warn("This Deep Time has no planet geometry (climate API 2); Serene Seasons' seasons "
+                    + "stay the same everywhere on its planets", e);
+            return 0;
+        } catch (Throwable t) {
+            logOnce(t);
+            return 0;
+        }
+    }
+
+    /**
+     * Latitude in degrees (north positive) at block (x, z) of the Deep Time planet {@code level}, on
+     * either side, or NaN: not a planet, no planet info yet on a client, or no way to know.
+     *
+     * <p>Deep Time's climate API 4 answers by the world's projection, which on a Petroff-Guyou world
+     * (the default from world-data format 0.5) depends on x as well as z ({@code
+     * DeepTimeClimate.latitudeDeg(Level, double, double)}). A Deep Time older than that is a Lambert
+     * world whatever its version, so latitude is a function of z and the circumference: API 2's
+     * {@code latitudeDeg(z, circumference)} (Deep Time's own Lambert formula) when it has it,
+     * the linear -z * 360 / C beyond it (a Deep Time with the circumference only). Each missing method is logged
+     * once and never asked for again.
+     */
+    public static double latitudeDeg(Level level, double x, double z) {
+        if (!noLatitudeApi) {
+            try {
+                return DeepTimeClimate.latitudeDeg(level, x, z);
+            } catch (LinkageError e) {
+                noLatitudeApi = true;
+                MicClimate.LOGGER.warn("This Deep Time has no latitude by position (climate API 4); using its "
+                        + "Lambert latitude from the circumference. Planets in its seamless Petroff-Guyou layout "
+                        + "would be wrong, which only a Deep Time that has that layout (and API 4) can have", e);
+            } catch (Throwable t) {
+                logOnce(t);
+                return Double.NaN;
+            }
+        }
+        int c = circumferenceBlocks(level);
+        if (c <= 0)
+            return Double.NaN;
+        if (!noLatitudeByCircumference) {
+            try {
+                return DeepTimeClimate.latitudeDeg(z, c);
+            } catch (LinkageError e) {
+                noLatitudeByCircumference = true;
+            } catch (Throwable t) {
+                logOnce(t);
+                return Double.NaN;
+            }
+        }
+        return -z * 360.0 / c;
+    }
+
+    /**
+     * The projection of the Deep Time planet {@code level}: {@code "petroff_guyou"}, {@code "lambert"}
+     * (API 4), {@code "lambert"} for a planet of an older Deep Time (all were Lambert), or {@code ""}
+     * for a level that is not a planet.
+     */
+    public static String projectionKind(Level level) {
+        if (!noLatitudeApi) {
+            try {
+                return DeepTimeClimate.projectionKind(level);
+            } catch (LinkageError e) {
+                // latitudeDeg logs this once; fall through to the circumference
+            } catch (Throwable t) {
+                logOnce(t);
+                return "";
+            }
+        }
+        return circumferenceBlocks(level) > 0 ? "lambert" : "";
+    }
+
     /** Deep Time's climate API version, for the log. */
     public static int apiVersion() {
-        return DeepTimeClimate.API_VERSION;
+        // Read through reflection: javac inlines the constant, which would report the version this jar
+        // was compiled against and not the installed one's.
+        try {
+            return DeepTimeClimate.class.getField("API_VERSION").getInt(null);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return 1;
+        }
     }
 
     private static void logOnce(Throwable t) {

@@ -99,6 +99,8 @@ Its snow and freeze resolver blends the region with the local biome's range plus
 Time picks those biomes from its climate, so snow follows the planet's cold places, but not in its
 exact numbers. Machines and players read Deep Time's numbers.
 
+(Phase 9, `plans/phase-09-hemisphere-seasons.md`, lifts the next limit on Deep Time planets.)
+
 **Serene Seasons' own effects stay global** (northern). Examples are leaf colours, crop seasons and its
 snowfall shift, so a southern summer looks like winter in those mods while this mod reports summer
 temperatures.

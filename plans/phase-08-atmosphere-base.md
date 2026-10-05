@@ -165,7 +165,8 @@ sends each player a Deep Time table and hooks that decision.) Before phase 9, fa
 on screen could disagree with the server's ice and snow layers in mid-latitude biomes.
 
 **Serene Seasons' own effects and Project Atmosphere's seasonal humidity, pressure and
-cloud-water modifiers stay global** (northern). Only temperature is per hemisphere.
+cloud-water modifiers stay global** (northern). Only temperature is per hemisphere. (Phase 9,
+`plans/phase-09-hemisphere-seasons.md`, makes both follow latitude on Deep Time planets.)
 
 **A region's live temperature can lag its base, and then its anomaly is large until Project
 Atmosphere simulates it again.** The cap (`deepTime.maxAnomaly`) bounds it. Three ways it happens:

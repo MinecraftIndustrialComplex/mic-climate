@@ -12,6 +12,13 @@ config = "mic_climate.mixins.json"
 [[mixins]]
 config = "mic_climate.projectatmosphere.mixins.json"
 
+# Optional: Serene Seasons' seasons by latitude on Deep Time planets (the southern hemisphere half a
+# year out, the seasons fading toward the equator). Same pattern: "required": false, defaultRequire 0,
+# and a plugin (seasons.SeasonsMixinPlugin) that applies each mixin only with Deep Time installed, to
+# Serene Seasons / Serene Seasons Plus versions it was checked against, when every target is present.
+[[mixins]]
+config = "mic_climate.seasons.mixins.json"
+
 [[mods]]
 modId       = "${mod_id}"
 version     = "${mod_version}"
@@ -108,4 +115,21 @@ description = '''${mod_description}'''
     type         = "optional"
     versionRange = "[0,)"
     ordering     = "AFTER"
+    side         = "BOTH"
+
+# Serene Seasons (optional): its date is the calendar Deep Time's monthly climate is read at, and on
+# Deep Time planets its seasons follow latitude (mic_climate.seasons.mixins.json).
+[[dependencies.${mod_id}]]
+    modId        = "sereneseasons"
+    type         = "optional"
+    versionRange = "[0,)"
+    ordering     = "NONE"
+    side         = "BOTH"
+
+# Serene Seasons Plus (optional): on Deep Time planets its snow policy follows latitude.
+[[dependencies.${mod_id}]]
+    modId        = "sereneseasonsplus"
+    type         = "optional"
+    versionRange = "[0,)"
+    ordering     = "NONE"
     side         = "BOTH"
