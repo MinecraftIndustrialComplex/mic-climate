@@ -691,3 +691,17 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
   2026-09-30 "The branch stays unmerged for now" (`plans/phase-09-hemisphere-seasons.md`). `seasons` was merged into
   `master` (`merge --no-ff`); the release is built against Deep Time's pushed API 4 jar once Deep Time's master is on
   origin, then a pack branch repins `mods/mic-climate.pw.toml` and Deep Time.
+- **2026-10-16 release 0.2.0 (Ben's "Merge, release, pack branch" of 2026-10-05, step 2).** `mod_version` 0.1.0 to 0.2.0;
+  the jar is `mic_climate-1.21.1-0.2.0.jar` (sha256 `db4798c91dfd7dd56e765df7c1fcb2eeb7bed2f472eb2a8d5391740b91906ccf`),
+  published as GitHub release `0.2.0` of MinecraftIndustrialComplex/mic-climate, built on the test VM against Deep Time's
+  pushed master (18764200, climate API version 4; the `api/climate` classes are byte-identical to the 6489d4a5 jar the
+  work was written against). `./gradlew build` green; GameTests 35 of 35 on the rebuilt VM, with and without
+  `-PwithAtmosphere` (its first start died in mod loading on Create's "unused register callbacks", the known load race; the retry
+  passed), all mixins bound. A pack branch `mic-climate-0.2.0` repins `mods/mic-climate.pw.toml` (url, hash,
+  tag); it is not merged into the pack's master. The pack carries no Deep Time entry (Deep Time is installed from its own
+  jar by `tools/smoke/install.sh`, which deletes any pack copy), so there was no Deep Time pin to update.
+  Found on the way, both in Deep Time, neither fixed here: (1) the Toroidal World dependency
+  `maven.modrinth:toroidal-world:8YTSYi9y` no longer resolves on a cold Gradle cache because the Modrinth slug is now
+  `exotic-worlds` (project id CdjG7l5z); (2) master 18764200 and a55f70f6 do not compile: `EditorModel.Deps.game(..., content)`
+  passes a four-argument lambda where `Launcher.launch` takes five (the `resume` flag). The jar was built from a throwaway
+  worktree with those two one-line edits, neither committed to Deep Time.
