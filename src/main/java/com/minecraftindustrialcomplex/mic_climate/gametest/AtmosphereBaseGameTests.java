@@ -210,7 +210,7 @@ public final class AtmosphereBaseGameTests {
     }
 
     /** Skips, as a pass, when Project Atmosphere's version is outside the hook's checked range. */
-    private static boolean skipOutsideKnownRange(GameTestHelper helper) {
+    static boolean skipOutsideKnownRange(GameTestHelper helper) {
         ArtifactVersion version = ModList.get().getModContainerById(Compat.PROJECT_ATMOSPHERE)
                 .map(c -> c.getModInfo().getVersion()).orElse(null);
         boolean known;

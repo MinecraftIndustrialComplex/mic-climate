@@ -292,7 +292,9 @@ Recommendation: move; the pack always ships both.
   forecast sender (the per-player Deep Time client table) and, in Serene Seasons, the client's
   rain-or-snow answer. Its jar stays a `compileOnly` input in the gitignored `libs/`. Ben is
   asking its author for consent on its Discord. Phase 9's hemisphere seasons (Ben's "Patch PA per position", 2026-09-30) add
-  three more mixins there under the same gate.
+  three more mixins there under the same gate. One more (2026-10-22, see the build log) changes none of its numbers: its
+  biome sampler gets one shared `RandomState` per server instead of building one per forecast square, under the same
+  gate but in any world with Project Atmosphere in range.
 - Serene Seasons (Glitchfiend) and Serene Seasons Plus (Gabou), both "All Rights Reserved": phase 9
   (`plans/phase-09-hemisphere-seasons.md`, Ben's decisions of 2026-09-30) mixes into five Serene
   Seasons classes and one Serene Seasons Plus class at runtime, in their own config, only for
@@ -705,3 +707,49 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
   `exotic-worlds` (project id CdjG7l5z); (2) master 18764200 and a55f70f6 do not compile: `EditorModel.Deps.game(..., content)`
   passes a four-argument lambda where `Launcher.launch` takes five (the `resume` flag). The jar was built from a throwaway
   worktree with those two one-line edits, neither committed to Deep Time.
+- **2026-10-22 Project Atmosphere's biome sampler shares one `RandomState` (branch `fix/pa-randomstate`).** A full-pack
+  server stalled its tick for 1.2 to 3.6 s the first time rtsim asked for a temperature in a region Project Atmosphere
+  had not loaded: rtsim's `HabitatSampler` → `ClimatePlugin.temperature` → `Climate.celsius` → Thermoo →
+  `ProjectAtmosphereSource.celsius` → `AtmoApi.getCurrentWeather` → `RegionForecastOrchestrator.ensureLoaded` →
+  `ForecastGenerator.generateForecastForRegionKey` → `sampleSquare` (line 228) → `new BiomeSampler` →
+  `RandomState.create` (`BiomeSampler.java:35`). Project Atmosphere 0.9.1.2 builds a new `RandomState` (the OVERWORLD
+  noise settings, the noise registry, `ProjectAtmosphere.seed`) in every `sampleSquare` call: the start-up forecast,
+  every region no save holds, every forecast regeneration, on whichever thread asks. With C2ME (`c2me-opts-dfc`'s
+  `MixinNoiseConfig`, at `RandomState.<init>` RETURN) every density function is then compiled again on that thread, and
+  vanilla's wiring alone (deep record `hashCode`s in `NoiseWiringHelper`) is about half the cost.
+  - Fix: `mixin.projectatmosphere.BiomeSamplerMixin` wraps that `RandomState.create` call and takes the state from
+    `atmosphere.ProjectAtmosphereRandomStates`: one slot per server, keyed by identity on the settings object, its
+    `noiseRouter()` (Lithostitched swaps routers in place), the noise lookup (`MappedRegistry.asLookup()` hands out one
+    instance) and the seed; built under a lock; cleared on `ServerStoppedEvent`. Same inputs, so the same state Project
+    Atmosphere would build, built once. Sharing it is safe for the same reason vanilla shares the level's state across
+    worldgen threads: a single-point sample keeps its caches in the context (C2ME's compiled functions too). Not
+    chosen: the level's own `ServerChunkCache.randomState()`, which would save the first build as well but is not the
+    same state (a flat or non-noise overworld gets dummy settings there, and other mods touch the level's state).
+  - Gate: an eleventh entry in `ProjectAtmosphereMixinPlugin` (now `Map.ofEntries`: `Map.of` stops at ten pairs) that
+    serves Project Atmosphere itself, so it applies in any world with Project Atmosphere in range. The plugin's global
+    "neither Deep Time nor Destroy" check is gone; the per-mixin `serves` check it duplicated still keeps the other ten
+    to Deep Time or Destroy (without both, each now logs its own skip line).
+  - GameTests: 37 of 37 with `-PwithAtmosphere`, 37 of 37 without (the two new ones skip). `atmosphereSamplerSharesOneState`:
+    the mixin bound; a second sampler, Project Atmosphere's own `sampleSquare` and an `AtmoApi` temperature query in a
+    region millions of blocks out build no state and take the cached one. `atmosphereSamplerSamplesItsOwnValues`: 1,875
+    points over ±24,000 blocks at three heights, the six climate parameters and the overworld multi-noise biome (51
+    distinct), all equal to a state built Project Atmosphere's way; the next seed differs at all 1,875.
+  - Full-pack boot (a synthetic stress world with rtsim, JFR `profile`, stopped 1,000 ticks after Done; control is the
+    0.2.0 jar, same server and world copy, back to back). Server-thread JFR samples from Done to stop:
+
+    | | 0.2.0 | fix |
+    |---|---|---|
+    | C2ME compiles after Done | 2: start-up forecast 3.03 s, rtsim's first new region 2.09 s | 1: start-up forecast 3.22 s |
+    | server-thread samples | 876 | 775 |
+    | in `RandomState.<init>` | 417 | 236 |
+    | in C2ME's compile | 375 | 211 |
+    | on Project Atmosphere's new-region path (rtsim's query) | 190 | 0 |
+    | on its start-up forecast | 225 | 234 |
+
+    Both arms generated the same 11 regions (the start-up 10 and rtsim's) with the same biome weights. Other test runs
+    loaded the machine (compile walls about 3x those of an earlier profile of the same world, which had 86 start-up and
+    83 rtsim samples), so the counts are the result, not the walls.
+  - What stays: the one build per server for the start-up forecast, on the server thread. Warming the slot on a worker
+    thread at server start would move that too; not done.
+  - Not released: the pack still pins 0.2.0. A release needs `mod_version` 0.2.1, a build against Deep Time's API 4 jar
+    in `libs/`, both GameTest runs, a GitHub release and a pack repin.

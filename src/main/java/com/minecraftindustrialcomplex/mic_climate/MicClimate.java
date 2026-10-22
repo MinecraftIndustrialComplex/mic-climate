@@ -1,6 +1,7 @@
 package com.minecraftindustrialcomplex.mic_climate;
 
 import com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereBase;
+import com.minecraftindustrialcomplex.mic_climate.atmosphere.ProjectAtmosphereRandomStates;
 import com.minecraftindustrialcomplex.mic_climate.command.ClimateCommands;
 import com.minecraftindustrialcomplex.mic_climate.config.ClimateConfig;
 import com.minecraftindustrialcomplex.mic_climate.crowns.CrownsBridge;
@@ -17,6 +18,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.registries.RegisterEvent;
 import org.slf4j.Logger;
 
@@ -78,6 +80,12 @@ public class MicClimate {
         if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE)
                 && (Compat.isLoaded(Compat.DEEP_TIME) || Compat.isLoaded(Compat.DESTROY) || ClimateConfig.Test.ENABLED))
             ProjectAtmosphereBase.init();
+
+        // Project Atmosphere's biome sampler shares one RandomState per server
+        // (mixin.projectatmosphere.BiomeSamplerMixin, in any world); drop it when the server stops so
+        // a finished world's registries are not kept.
+        if (Compat.isLoaded(Compat.PROJECT_ATMOSPHERE))
+            NeoForge.EVENT_BUS.addListener(ServerStoppedEvent.class, e -> ProjectAtmosphereRandomStates.clear());
 
         // Serene Seasons' seasons by latitude on Deep Time planets (mixin.seasons, applied by
         // SeasonsMixinPlugin under the same conditions). The client half is the colour override and
