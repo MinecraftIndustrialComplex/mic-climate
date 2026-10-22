@@ -25,6 +25,10 @@ import java.util.Set;
  * Project Atmosphere (Deep Time's climate as its base, Destroy's pollution inside its temperature,
  * and the per-player Deep Time client table with the rain or snow it decides).
  *
+ * <p>One more serves Project Atmosphere itself, in any world: its biome sampler takes one shared
+ * {@code RandomState} instead of building and compiling a new one per forecast square
+ * ({@code atmosphere.ProjectAtmosphereRandomStates}).
+ *
  * <p>Project Atmosphere's jar says "All Rights Reserved" and has no API for its base temperature,
  * so the hooks mix into its internals (Ben's calls, 2026-09-30: "Mixin anyway"; pollution "in all
  * worlds"). Internals change without notice, so each mixin is applied only when every one of these
@@ -34,8 +38,9 @@ import java.util.Set;
  *   <li>Project Atmosphere is installed, at a version inside
  *       {@link ProjectAtmosphereVersions#KNOWN_RANGE} (or
  *       {@code -Dmic_climate.projectAtmosphereBase.anyVersion=true});</li>
- *   <li>a mod the mixin serves is installed: Deep Time (the base, the client table) or Destroy (the
- *       pollution part, which shares the temperature hooks), or this JVM is a GameTest run;</li>
+ *   <li>a mod the mixin serves is installed: Deep Time (the base, the client table), Destroy (the
+ *       pollution part, which shares the temperature hooks) or Project Atmosphere itself (the
+ *       shared biome sampler state), or this JVM is a GameTest run;</li>
  *   <li>the mod whose class it targets is installed (Serene Seasons for the rain-or-snow mixin);</li>
  *   <li>{@code -Dmic_climate.projectAtmosphereBase=false} is not set;</li>
  *   <li>every method the mixin injects into, and every call it wraps, is present in that mod's
@@ -69,6 +74,8 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
     private static final List<String> FOR_DEEP_TIME = List.of(DEEP_TIME_MOD);
     private static final List<String> FOR_DEEP_TIME_OR_DESTROY = List.of(DEEP_TIME_MOD, DESTROY_MOD);
     private static final List<String> FOR_DESTROY = List.of(DESTROY_MOD);
+    /** Mixins that serve Project Atmosphere itself (its biome sampler's shared state), in any world. */
+    private static final List<String> FOR_PROJECT_ATMOSPHERE = List.of(PA_MOD);
     private static final String MIXIN_PACKAGE = "com.minecraftindustrialcomplex.mic_climate.mixin.projectatmosphere.";
 
     private static final String PA = "net/Gabou/projectatmosphere/";
@@ -101,6 +108,11 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
     private static final Method APPLY_DELTAS = new Method("applyDeltas",
             "(Ljava/util/List;JLjava/lang/String;L" + PA + "modules/atmosphere/AtmosphericUpdateScheduler$UpdateMode;)V");
 
+    // The biome sampler's shared RandomState (atmosphere.ProjectAtmosphereRandomStates).
+    private static final Method BIOME_SAMPLER_INIT = new Method("<init>",
+            "(JLnet/minecraft/core/RegistryAccess;Lnet/minecraft/world/level/biome/BiomeSource;)V");
+    private static final String RANDOM_STATE = "net/minecraft/world/level/levelgen/RandomState";
+
     // The hemisphere seasons' mixins (atmosphere.ProjectAtmosphereSeasons), gated the same way.
     private static final String LEVEL = "Lnet/minecraft/world/level/Level;";
     private static final String SS_HELPER = "sereneseasons/api/season/SeasonHelper";
@@ -110,8 +122,8 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
     private static final Method BUILD_STATE_VIEW = new Method("buildStateView", "(" + REGION_KEY + "L" + PA
             + "modules/atmosphere/RegionAtmosphereState;JJ)L" + PA + "modules/atmosphere/AtmosphericUpdateScheduler$StateView;");
 
-    private static final Map<String, Needs> NEEDS = Map.of(
-            "RegionAtmosphereStateMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
+    private static final Map<String, Needs> NEEDS = Map.ofEntries(
+            Map.entry("RegionAtmosphereStateMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(GET_TARGET, GET_EFFECTIVE_BASE, GET_BASELINE_MIN, GET_BASELINE_MAX,
                             new Method("getBaseTemperature", "()F"),
                             new Method("getTemperature", "()F"),
@@ -119,45 +131,51 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
                     List.of(new Call(GET_TARGET, DRIFT, "currentTemperatureOffsetC", "()F"),
                             new Call(GET_EFFECTIVE_BASE, DRIFT, "currentTemperatureOffsetC", "()F"),
                             new Call(GET_BASELINE_MIN, DRIFT, "currentTemperatureOffsetC", "()F"),
-                            new Call(GET_BASELINE_MAX, DRIFT, "currentTemperatureOffsetC", "()F"))),
-            "AtmoApiMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
+                            new Call(GET_BASELINE_MAX, DRIFT, "currentTemperatureOffsetC", "()F")))),
+            Map.entry("AtmoApiMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(new Method("getWeatherSnapshot",
                             "(" + SERVER_LEVEL + BLOCK_POS + "J)L" + PA + "api/WeatherSnapshot;")),
-                    List.of()),
-            "ForecastOrchestratorMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
+                    List.of())),
+            Map.entry("ForecastOrchestratorMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(new Method("getCurrentTemperature", "(" + SERVER_LEVEL + BLOCK_POS + "J)F")),
-                    List.of()),
-            "LocalBiomeTemperatureResolverMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
+                    List.of())),
+            Map.entry("LocalBiomeTemperatureResolverMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(new Method("getLocalBiomeTemperature",
                             "(" + SERVER_LEVEL + BLOCK_POS + REGION_KEY + "L" + PA + "modules/region/ForecastRegion;)D")),
-                    List.of()),
-            "CropStressManagerMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
+                    List.of())),
+            Map.entry("CropStressManagerMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(CROP_EVALUATE),
                     List.of(new Call(CROP_EVALUATE, PA + "manager/ForecastOrchestrator", "getCurrentTemperature",
-                            "(" + REGION_KEY + "J)F"))),
-            "ForecastGeneratorMixin", new Needs(PA_MOD, FOR_DEEP_TIME,
+                            "(" + REGION_KEY + "J)F")))),
+            Map.entry("ForecastGeneratorMixin", new Needs(PA_MOD, FOR_DEEP_TIME,
                     List.of(SEND_TO_PLAYER, COMPUTE_AVERAGES),
                     List.of(new Call(COMPUTE_AVERAGES, "net/neoforged/neoforge/network/PacketDistributor", "sendToAllPlayers",
-                            "(" + PAYLOAD + "[" + PAYLOAD + ")V"))),
+                            "(" + PAYLOAD + "[" + PAYLOAD + ")V")))),
             // Two hooks in one class: the hybrid pollution rule (Destroy) and the regional sunlight (Deep Time).
-            "AtmosphericUpdateSchedulerMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
+            Map.entry("AtmosphericUpdateSchedulerMixin", new Needs(PA_MOD, FOR_DEEP_TIME_OR_DESTROY,
                     List.of(APPLY_DELTAS, BUILD_STATE_VIEW),
                     List.of(new Call(APPLY_DELTAS, PA + "modules/atmosphere/RegionAtmosphereState", "adjustTemperature", "(F)V"),
-                            new Call(BUILD_STATE_VIEW, PA + "modules/atmosphere/RegionAtmosphereState", "getBiomeSunlightMultiplier", "()F"))),
-            "SeasonHooksPrecipitationMixin", new Needs(SERENE_SEASONS_MOD, FOR_DEEP_TIME,
+                            new Call(BUILD_STATE_VIEW, PA + "modules/atmosphere/RegionAtmosphereState", "getBiomeSunlightMultiplier", "()F")))),
+            Map.entry("SeasonHooksPrecipitationMixin", new Needs(SERENE_SEASONS_MOD, FOR_DEEP_TIME,
                     List.of(new Method("getPrecipitationAtSeasonal",
                             "(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/Holder;" + BLOCK_POS
                                     + ")Lnet/minecraft/world/level/biome/Biome$Precipitation;")),
-                    List.of()),
-            "SereneSeasonsSeasonDelegateMixin", new Needs(PA_MOD, FOR_DEEP_TIME,
+                    List.of())),
+            Map.entry("SereneSeasonsSeasonDelegateMixin", new Needs(PA_MOD, FOR_DEEP_TIME,
                     List.of(DELEGATE_SNAPSHOT, DELEGATE_MOISTURE),
                     List.of(new Call(DELEGATE_SNAPSHOT, SS_HELPER, "getSeasonState", GET_SEASON_STATE),
                             new Call(DELEGATE_MOISTURE, SS_HELPER, "getSeasonState", GET_SEASON_STATE),
-                            new Call(DELEGATE_MOISTURE, SS_HELPER, "usesTropicalSeasons", "(Lnet/minecraft/core/Holder;)Z"))),
-            "ClientTickHandlerMixin", new Needs(PA_MOD, FOR_DEEP_TIME,
+                            new Call(DELEGATE_MOISTURE, SS_HELPER, "usesTropicalSeasons", "(Lnet/minecraft/core/Holder;)Z")))),
+            // Project Atmosphere's own cost, so in every world it runs in.
+            Map.entry("BiomeSamplerMixin", new Needs(PA_MOD, FOR_PROJECT_ATMOSPHERE,
+                    List.of(BIOME_SAMPLER_INIT),
+                    List.of(new Call(BIOME_SAMPLER_INIT, RANDOM_STATE, "create",
+                            "(Lnet/minecraft/world/level/levelgen/NoiseGeneratorSettings;Lnet/minecraft/core/HolderGetter;J)L"
+                                    + RANDOM_STATE + ";")))),
+            Map.entry("ClientTickHandlerMixin", new Needs(PA_MOD, FOR_DEEP_TIME,
                     List.of(new Method("getCurrentSeason", "(Lnet/minecraft/client/multiplayer/ClientLevel;" + BLOCK_POS + ")L"
                             + PA + "seasons/SeasonStage;")),
-                    List.of())
+                    List.of()))
     );
 
     /** Why the whole config is off, or null when the per-mixin checks decide. Computed once. */
@@ -175,8 +193,8 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
             LOGGER.info("Project Atmosphere {} is inside the range its hooks were checked against ({}); "
                     + "checking their targets", paVersion, ProjectAtmosphereVersions.KNOWN_RANGE);
         } else {
-            LOGGER.info("Project Atmosphere hooks (Deep Time base, Destroy pollution) not applied: {}. Project "
-                    + "Atmosphere keeps its own temperature.", disabledReason);
+            LOGGER.info("Project Atmosphere hooks (Deep Time base, Destroy pollution, shared biome sampler state) "
+                    + "not applied: {}. Project Atmosphere runs unchanged.", disabledReason);
         }
     }
 
@@ -189,9 +207,6 @@ public class ProjectAtmosphereMixinPlugin implements IMixinConfigPlugin {
         ModFileInfo pa = mods.getModFileById(PA_MOD);
         if (pa == null)
             return "Project Atmosphere is not installed";
-        boolean gametest = Boolean.getBoolean("mic_climate.gametest");
-        if (mods.getModFileById(DEEP_TIME_MOD) == null && mods.getModFileById(DESTROY_MOD) == null && !gametest)
-            return "neither Deep Time nor Destroy is installed, so there is nothing to add to it";
         ArtifactVersion version = pa.getMods().stream()
                 .filter(m -> PA_MOD.equals(m.getModId()))
                 .findFirst()
