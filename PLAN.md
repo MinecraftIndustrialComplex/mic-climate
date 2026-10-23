@@ -753,3 +753,12 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
     thread at server start would move that too; not done.
   - Not released: the pack still pins 0.2.0. A release needs `mod_version` 0.2.1, a build against Deep Time's API 4 jar
     in `libs/`, both GameTest runs, a GitHub release and a pack repin.
+- **2026-10-22 release 0.2.1 (Ben: "Release 0.2.1 now").** `mod_version` 0.2.0 to 0.2.1; the jar is
+  `mic_climate-1.21.1-0.2.1.jar` (sha256 `975c8be0d6f421cc105d696ffd7fe86da6f1ff01cc10e40492b9bcb7eed510e3`), published as
+  GitHub release `0.2.1` of MinecraftIndustrialComplex/mic-climate. It carries one change over 0.2.0: Project Atmosphere's
+  biome sampler shares one `RandomState` per server (entry above), so a region Project Atmosphere has not loaded no longer
+  stalls the server thread for seconds when C2ME recompiles the density functions. Built from the `fix/pa-randomstate`
+  worktree at master 6d875a4 against Deep Time's climate API 4 jar (`deeptime-1.21.1-0.0.1.jar` from the Deep Time checkout,
+  copied to the gitignored `libs/deeptime-1.21.1.jar`; compileOnly, so the mic_climate jar holds no Deep Time class).
+  `./gradlew build` green; GameTests 37 of 37 with `-PwithAtmosphere` and 37 of 37 without, all mixins bound. A pack
+  repin of `mods/mic-climate.pw.toml` follows.
