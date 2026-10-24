@@ -762,3 +762,23 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
   copied to the gitignored `libs/deeptime-1.21.1.jar`; compileOnly, so the mic_climate jar holds no Deep Time class).
   `./gradlew build` green; GameTests 37 of 37 with `-PwithAtmosphere` and 37 of 37 without, all mixins bound. A pack
   repin of `mods/mic-climate.pw.toml` follows.
+- **2026-10-24 Deep Time geometry through its planet API only (branch `fix/deeptime-cube`; Ben's "Yes, both fixes" and his
+  "call our world as if it were a stable sphere").** Deep Time's cube world (format 0.7) left two faults here: a dead
+  `LinkageError` fallback to `DeepTimeClimate.latitudeDeg(z, C)`, and on a cube a latitude, north and scale read through
+  the circumference and projection kind, which mean nothing there. Deep Time now has a planet API
+  (`api.planet.DeepTimePlanet`, version 1: latitude, longitude, local frame, distances and radius on the sphere, whatever
+  the map) and its climate API 6 dropped `circumferenceBlocks` and `projectionKind`. mic-climate moved onto it only:
+  - `provider.DeepTimeSource`: `latitudeDeg(level, x, z)` and `planetRadiusMetres(level)` from `DeepTimePlanet.of(level)`;
+    the API 2 and API 4 paths, `latitudeDeg(z, C)`, the linear fallback, the missing-method flags, `circumferenceBlocks`,
+    `projectionKind` and the unused `apiVersion` are gone. One logged-once catch stays (a failure reads as off a planet).
+  - `seasons.PlanetLatitude.radiusMetres` replaces `circumference` and `projection`; `SereneSeasonsHemispheres.onPlanet`
+    is a positive radius; `SeasonsClient` re-meshes when the radius changes; the probe line prints `planet R <km>`.
+  - The GameTests' stand-in planet keeps its linear latitude in z and counts as a sphere of C / 2π blocks.
+  - Docs: `plans/phase-09-hemisphere-seasons.md` ("Any map: Deep Time's planet API"), `tools/planet-seasons-probe.sh`,
+    the build and mods.toml comments.
+  - Built on the test VM against the `sphere-api` Deep Time jar: `./gradlew build` green, the jar references only
+    `api.planet.DeepTimePlanet`, `api.climate.DeepTimeClimate` and `ClimateSample`; GameTests 37 of 37 with
+    `-PwithAtmosphere` and 37 of 37 without, all mixins bound.
+  - No release. The jar needs Deep Time's planet API: the pack takes a new mic-climate jar together with the Deep Time jar
+    that carries it. The pinned 0.2.1 on that Deep Time keeps latitude (it calls `latitudeDeg(Level, x, z)`) but reads the
+    missing circumference as 0, so its melt pass and client re-mesh lose the planet check.

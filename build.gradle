@@ -178,8 +178,9 @@ dependencies {
     // the pack's pin, byte-identical to Modrinth nYao5aRK (sha1 13d356654676b83694c8ad78f45e2cd5dd8a93e0),
     // kept in libs/ as NeoForge-Version-Serene Seasons Plus-1.21.1-5.1.2.jar. Never bundled.
     compileOnly(files("${project.projectDir}/libs/NeoForge-Version-Serene Seasons Plus-1.21.1-${sereneseasons_plus_version_number}.jar"))
-    // Deep Time's public climate API (com.minecraftindustrialcomplex.deeptime.api.climate), read by
-    // provider.DeepTimeSource in Deep Time worlds. compileOnly and optional at runtime: without Deep
+    // Deep Time's public climate and planet APIs (com.minecraftindustrialcomplex.deeptime.api.climate
+    // and .api.planet, the planet API version 1 or later), read by provider.DeepTimeSource in Deep
+    // Time worlds. compileOnly and optional at runtime: without Deep
     // Time the class is never loaded. Deep Time is not on a maven; build it (its neoforge/ module,
     // `./gradlew jar`) and copy build/libs/deeptime-1.21.1-<version>.jar to
     // libs/deeptime-${minecraft_version}.jar. libs/ is gitignored.
