@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Hemisphere seasons on a real Deep Time planet, whatever its projection (Petroff-Guyou, the default
-# from Deep Time's world-data format 0.5, or Lambert): a MIC planet server (Deep Time's smoke set
+# Hemisphere seasons on a real Deep Time planet, whatever map lays it out (mic-climate reads latitude
+# through Deep Time's planet API and never asks which): a MIC planet server (Deep Time's smoke set
 # `mic`) with this checkout's jar in place of the pack's, probing a grid of places with
 # `/mic_climate probe` in northern midwinter and midsummer. Each probe line says the block's latitude
-# (Deep Time's own, by its projection), the strength of the season there, the hemisphere's
-# sub-season, and the planet's circumference and projection kind. The grid straddles the equator
-# (z = 0 on both projections), takes five longitudes (on Petroff-Guyou latitude depends on x too) and
-# stays 300+ blocks inside the north and south edges.
+# (Deep Time's own), the strength of the season there, the hemisphere's sub-season, and the planet's
+# radius. The grid below is only where to sample, picked for the Petroff-Guyou world at 16k (its
+# equator at z = 0, five longitudes, 300+ blocks inside its north and south edges); a position the
+# map leaves off the planet probes as "no latitude".
 #
 # Runs on the Deep Time test VM from this checkout's remote copy, driven from Deep Time's checkout:
 #
@@ -26,7 +26,8 @@ MICJAR="$(find "$HERE/build/libs" -maxdepth 1 -name 'mic_climate-*.jar' ! -name 
 OUT="$HERE/build/review-out"
 mkdir -p "$OUT"
 
-# z rows north to south (north is -z; the equator is z = 0) and x columns across the 13312-block world.
+# z rows north to south and x columns across the 13312-block world (on the Petroff-Guyou world this
+# samples, north is -z and the equator is z = 0; the latitudes printed are the planet API's).
 ZS=(-3000 -1500 -500 0 500 1500 3000)
 XS=(-6000 -3000 0 3000 6000)
 

@@ -31,7 +31,8 @@ and branch the pack, Ben answered, verbatim, **"Merge, release, pack branch (Rec
 
 ## The model (`seasons.LatitudeSeasons`)
 
-Latitude is Deep Time's, by its projection (below: API 4; on a Lambert world φ = asin(−z / R), R = C / 2π).
+Latitude is Deep Time's, from its planet API, whatever map lays the planet out in blocks (below: "Any
+map: Deep Time's planet API").
 
 - **The south is half a year out.** South of the equator the temperate calendar is shifted by half
   a cycle: exactly six of Serene Seasons' twelve sub-seasons. The local boundaries therefore fall on
@@ -166,7 +167,7 @@ triggers at boundaries the hemispheres share (season-change regeneration), or co
 trees (Dynamic Trees) and aurora factor are inert in the pack (neither mod is installed) and are not
 patched.
 
-## The latitude on both sides (Deep Time climate API 2)
+## The latitude on both sides (Deep Time climate API 2; superseded, see "Any map" below)
 
 Deep Time's climate API was server-side only, and the client needs the latitude for colours. Deep
 Time branch `climate-latitude-api` (not merged) adds, at `DeepTimeClimate.API_VERSION` 2:
@@ -181,7 +182,7 @@ mic-climate reads it through `provider.DeepTimeSource.circumferenceBlocks` (stil
 imports Deep Time). A Deep Time without API 2 answers `NoSuchMethodError`, logged once; the seasons
 then stay global everywhere, as before.
 
-## The seamless world: latitude by projection (Deep Time climate API 4)
+## The seamless world: latitude by projection (Deep Time climate API 4; superseded, see "Any map" below)
 
 From Deep Time's world-data format 0.5 the default planet is the Petroff-Guyou world (an equal-area
 2:1 map, 13,312 x 6,656 blocks at 16k: an east-west slide on the x edges and half-turns on the north and
@@ -206,6 +207,28 @@ equator is seasonless), and Project Atmosphere's regions are keyed by position. 
 Petroff-Guyou world are points on its long edges, not lines; the strength clamps at the full-season
 latitude, so nothing special happens there.
 
+## Any map: Deep Time's planet API (2026-10-24)
+
+Deep Time added a cube world (format 0.7) and may add other maps, and Ben asked for one stable way for
+mods to read any Deep Time world "as if it were a stable sphere regardless of what projections, seams,
+etc, we implement". Deep Time's planet API (`com.minecraftindustrialcomplex.deeptime.api.planet`,
+`DeepTimePlanet`, its own version 1; contract in its package documentation and Deep Time's
+`docs/api/planet.md`) answers latitude, longitude, the local frame, distances and the radius on the
+sphere, and its climate API 6 dropped `circumferenceBlocks` and `projectionKind`. mic-climate now:
+
+- asks `DeepTimePlanet.of(level).latitudeDeg(x, z)` for every latitude, through
+  `DeepTimeSource.latitudeDeg` (NaN for a level that is not a planet, a client before the planet info,
+  and a position the map leaves off the planet, such as the ocean past a cube's corners);
+- uses the planet's radius (`DeepTimeSource.planetRadiusMetres`, `PlanetLatitude.radiusMetres`) where it
+  used the circumference: whether a level is a planet (the melt pass's gate), the probe line
+  (`planet R <km>`) and the client's re-mesh trigger;
+- has no fallbacks: the API 2 and API 4 paths, `latitudeDeg(z, C)`, the linear `-z * 360 / C` and the
+  flags that remembered a missing method are gone (no backward compatibility before a public release),
+  and nothing in mic-climate knows a projection's name, its seams, its period or where its equator is.
+
+The GameTests' stand-in planet (`ClimateConfig.Test.TestPlanet`, used because those tests run without
+Deep Time) keeps its own linear latitude in z and counts as a sphere of C / 2π blocks.
+
 ## Gating and failing safe
 
 **At mixin time** (`seasons.SeasonsMixinPlugin`, and `atmosphere.ProjectAtmosphereMixinPlugin` for
@@ -224,8 +247,7 @@ Otherwise one log line and that part keeps its own season. Behind that: `"requir
 mod's own value back on any exception. **Without Deep Time nothing is applied at all.**
 
 **At runtime** (`seasons.PlanetLatitude`): only with `deepTime.hemisphereSeasons` (server config,
-default true) on, and only on a level whose circumference is positive
-(a Deep Time planet). North of the full-season latitude the level's temperate season is the local one and
+default true) on, and only on a level Deep Time's planet API calls a planet (a positive radius). North of the full-season latitude the level's temperate season is the local one and
 every temperate hook passes Serene Seasons' own value through (a tropical biome's wet/dry calendar is
 the north's moved one everywhere, but is read only inside the band). Off a planet every hook returns
 exactly what the patched code computed.
@@ -241,10 +263,10 @@ Horizons and render threads).
   own re-mesh on a sub-season change covers the calendar; the strength does not change with time.
   What it does not cover is the latitude becoming known after the first chunks were meshed (the
   planet info can arrive late) or the switch changing in a running game. `SeasonsClient` re-meshes
-  once when the circumference, the switch or the full-season latitude changes for the level on
-  screen.
-- **Distant Horizons** asks the resolvers with no position (x = z = 0), which would read as the
-  equator. Those calls get Serene Seasons' own colour, so LODs look as they did before (the level's
+  once when the planet's radius (0 before the planet info), the switch or the full-season latitude
+  changes for the level on screen.
+- **Distant Horizons** asks the resolvers with no position (x = z = 0), which would read as
+  whatever latitude block (0, 0) shows. Those calls get Serene Seasons' own colour, so LODs look as they did before (the level's
   season), not seasonless.
 - **The settings come from the server.** Both live in the world's server config
   (`serverconfig/mic_climate-server.toml`), which NeoForge sends to every client when it joins, so a
@@ -261,7 +283,7 @@ Horizons and render threads).
 - `/mic_climate probe` gains:
   - `seasons`: the discrete sub-season here; latitude, strength, the level's and the hemisphere's
     sub-season; the tropical wet/dry strength; Serene Seasons' temperature here beside the level's (snow
-    and ice below 0.15); whether wheat and carrots grow; the melt chance and rolls; the circumference;
+    and ice below 0.15); whether wheat and carrots grow; the melt chance and rolls; the planet's radius;
     how many of its four server classes bound;
   - `pa-season`: Project Atmosphere's regional season and sunlight beside its level-wide ones.
 

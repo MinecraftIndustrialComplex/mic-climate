@@ -307,7 +307,7 @@ public final class ClimateConfig {
                     "joins, so the colours a client draws follow the server."
             ).push("deepTime");
             builder.comment(
-                    "Serene Seasons' seasons by latitude on a Deep Time planet (the latitude is Deep Time's own, by its projection: on a Petroff-Guyou planet it depends on x and z).",
+                    "Serene Seasons' seasons by latitude on a Deep Time planet (the latitude is Deep Time's own, read on the planet's sphere whatever map lays it out in blocks).",
                     "Serene Seasons has one season per world, the northern one. With this on, south of the equator",
                     "its calendar runs half a year out, and the seasons fade smoothly toward the equator, where",
                     "there are none (Mid Summer, Serene Seasons' neutral season, all year, and every crop in season",
@@ -401,12 +401,14 @@ public final class ClimateConfig {
         private Test() {}
 
         /**
-         * A stand-in Deep Time planet for the hemisphere seasons: every server level of the overworld
-         * counts as a planet of this circumference, with its equator at block {@code equatorZ}.
+         * A stand-in planet for the hemisphere-season GameTests, which run without Deep Time: every
+         * server level of the overworld counts as a planet whose latitude is linear in z, with its
+         * equator at block row {@code equatorZ}. Only the tests' own arithmetic; a real planet's
+         * latitude always comes from Deep Time's planet API.
          *
          * @param circumference C in blocks; latitude is {@code -(z - equatorZ) * 360 / C}
-         * @param equatorZ      the z of the equator (0 on a real planet); a test moves it to put its
-         *                      own blocks in the north, on the equator or in the south
+         * @param equatorZ      the z of the equator; a test moves it to put its own blocks in the
+         *                      north, on the equator or in the south
          */
         public record TestPlanet(int circumference, int equatorZ) {}
 

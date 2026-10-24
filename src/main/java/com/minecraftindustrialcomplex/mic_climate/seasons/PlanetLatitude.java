@@ -11,18 +11,17 @@ import java.lang.ref.WeakReference;
  * Where on a Deep Time planet a block is: its latitude, and the season's strength there. The gate
  * every hemisphere-season hook goes through, on the server and on clients.
  *
- * <p>Latitude is Deep Time's, by the planet's own projection: Deep Time's climate API 4 answers
- * {@code latitudeDeg(level, x, z)} (north positive), which on its default Petroff-Guyou world depends
- * on x as well as z and on a Lambert world on z alone. A Deep Time older than API 4 is a Lambert world
- * and answers from the circumference ({@link DeepTimeSource#latitudeDeg}). A level is a planet only
- * when Deep Time knows it (the server's generator, or on a client the planet info the server sent),
- * so worlds Deep Time did not generate, other dimensions and a client before the info arrives all
- * answer NaN, and every hook then hands the mod it patched its own value back.
+ * <p>Latitude is Deep Time's, from its planet API ({@link DeepTimeSource#latitudeDeg}), which reads
+ * the world as the sphere it stands for whatever map lays it out in blocks: nothing here knows which
+ * projection a world uses, where its seams, edges or faces are, or how latitude depends on x and z.
+ * A level is a planet only when Deep Time knows it (the server's generator, or on a client the
+ * planet info the server sent), so worlds Deep Time did not generate, other dimensions and a client
+ * before the info arrives all answer NaN, as does a position the map leaves off the planet, and
+ * every hook then hands the mod it patched its own value back.
  *
  * <p>Cheap enough for the hottest callers (colour resolvers on mesh and Distant Horizons threads,
- * precipitation per column per frame): Deep Time's answer allocates a little on a Petroff-Guyou
- * world, so each thread keeps a small cache of the columns it asked about last; a hit is a hash, a
- * compare and a read.
+ * precipitation per column per frame): Deep Time's answer allocates a little, so each thread keeps a
+ * small cache of the columns it asked about last; a hit is a hash, a compare and a read.
  */
 public final class PlanetLatitude {
 
@@ -54,7 +53,7 @@ public final class PlanetLatitude {
     /**
      * Latitude in degrees (north positive, clamped to ±90) of block column (x, z) in {@code level}, or
      * NaN when the hemisphere seasons do not apply there: not a Deep Time planet, or switched off
-     * ({@code deepTime.hemisphereSeasons} in the server config). x matters on a Petroff-Guyou planet.
+     * ({@code deepTime.hemisphereSeasons} in the server config), or off the planet.
      */
     public static double latitude(Level level, double x, double z) {
         if (level == null || !switchedOn())
@@ -100,26 +99,19 @@ public final class PlanetLatitude {
         return ClimateConfig.hemisphereSeasons();
     }
 
-    /** The planet's circumference for {@code level}, or 0; for the probe and the client's re-mesh trigger. */
-    public static int circumference(Level level) {
+    /**
+     * The radius in metres of the planet {@code level} is, or 0 when it is not one; for the melt
+     * pass's gate, the probe and the client's re-mesh trigger. The stand-in planet ({@link
+     * ClimateConfig.Test.TestPlanet}) counts as a sphere of C / 2&pi; blocks of a metre each.
+     */
+    public static double radiusMetres(Level level) {
         if (level == null)
-            return 0;
+            return 0.0;
         ClimateConfig.Test.TestPlanet test = ClimateConfig.Test.seasonTestPlanet();
         if (test != null)
-            return !level.isClientSide() && level.dimension() == Level.OVERWORLD ? test.circumference() : 0;
-        return deepTimeLoaded() ? DeepTimeSource.circumferenceBlocks(level) : 0;
-    }
-
-    /**
-     * The projection of the planet {@code level} ({@code "petroff_guyou"} or {@code "lambert"}), or
-     * {@code ""}; for the probe and the client's re-mesh trigger. The stand-in planet is Lambert-like.
-     */
-    public static String projection(Level level) {
-        if (level == null)
-            return "";
-        if (ClimateConfig.Test.seasonTestPlanet() != null)
-            return circumference(level) > 0 ? "lambert" : "";
-        return deepTimeLoaded() ? DeepTimeSource.projectionKind(level) : "";
+            return !level.isClientSide() && level.dimension() == Level.OVERWORLD && test.circumference() > 0
+                    ? test.circumference() / (2.0 * Math.PI) : 0.0;
+        return deepTimeLoaded() ? DeepTimeSource.planetRadiusMetres(level) : 0.0;
     }
 
     private static boolean deepTimeLoaded() {
