@@ -782,3 +782,13 @@ Test from a fresh export of the pack (the 2.1.1 instance lacks Project Atmospher
   - No release. The jar needs Deep Time's planet API: the pack takes a new mic-climate jar together with the Deep Time jar
     that carries it. The pinned 0.2.1 on that Deep Time keeps latitude (it calls `latitudeDeg(Level, x, z)`) but reads the
     missing circumference as 0, so its melt pass and client re-mesh lose the planet check.
+- **2026-10-24 release 0.2.2 (the coordinator's go after Deep Time's gate on 1926ed08).** `mod_version` 0.2.1 to 0.2.2; the
+  jar is `mic_climate-1.21.1-0.2.2.jar` (sha256 `67a887857eabd3249ebf094aa1711aabd0608a356670e87d33d764d220f19a7a`), published as GitHub release `0.2.2` of
+  MinecraftIndustrialComplex/mic-climate. It carries one change over 0.2.1: Deep Time geometry through its planet API only
+  (entry above), so it wants a Deep Time with the planet API (master 0cabbe18 or later, climate API 6); with an older one
+  the hemisphere seasons stay off. Built on the test VM from master 244545d plus the version bump, against the Deep Time
+  `sphere-api` jar at f1d7e73c, whose `api` classes match master 1926ed08 but for a `package-info` comment (compileOnly, so
+  the mic_climate jar holds no Deep Time class). `./gradlew build` green; GameTests 37 of 37 with `-PwithAtmosphere` (its
+  first start died in mod loading on Create's "unused register callbacks", the known load race; the retry passed) and 37 of
+  37 without, on a server without Deep Time, all mixins bound. A pack repin of `mods/mic-climate.pw.toml` follows,
+  together with the Deep Time jar that has the planet API.
