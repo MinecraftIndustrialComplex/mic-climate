@@ -45,8 +45,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * on screen.
  *
  * <p><b>Distant Horizons</b> asks the resolvers for its LODs with no position ({@code x = z = 0}),
- * which would read as the equator; those calls get Serene Seasons' own colour, so LODs look as they
- * did before (the level's season) rather than seasonless.
+ * which would read as whatever latitude block (0, 0) shows; those calls get Serene Seasons' own
+ * colour, so LODs look as they did before (the level's season).
  *
  * <p>Registered only on a client with Serene Seasons and Deep Time installed.
  */
@@ -55,7 +55,7 @@ public final class SeasonsClient {
     private static final AtomicBoolean LOGGED_FAILURE = new AtomicBoolean();
 
     /** What the colours were last meshed with; client thread only. */
-    private record Planet(ClientLevel level, int circumference, String projection, boolean on, double fullLatitude) {}
+    private record Planet(ClientLevel level, double radiusMetres, boolean on, double fullLatitude) {}
 
     private static Planet meshedWith;
 
@@ -123,15 +123,15 @@ public final class SeasonsClient {
             meshedWith = null;
             return;
         }
-        Planet now = new Planet(level, PlanetLatitude.circumference(level), PlanetLatitude.projection(level), PlanetLatitude.switchedOn(),
+        Planet now = new Planet(level, PlanetLatitude.radiusMetres(level), PlanetLatitude.switchedOn(),
                 ClimateConfig.fullSeasonLatitude());
         Planet before = meshedWith;
         meshedWith = now;
         if (before == null || before.level() != level || before.equals(now))
             return;
-        if (now.circumference() > 0 || before.circumference() > 0) {
-            MicClimate.LOGGER.info("Hemisphere seasons: re-meshing for planet circumference {} (was {}), projection '{}' (was '{}'), {}",
-                    now.circumference(), before.circumference(), now.projection(), before.projection(), now.on() ? "on" : "off");
+        if (now.radiusMetres() > 0.0 || before.radiusMetres() > 0.0) {
+            MicClimate.LOGGER.info("Hemisphere seasons: re-meshing for a planet of radius {} m (was {} m), {}",
+                    Math.round(now.radiusMetres()), Math.round(before.radiusMetres()), now.on() ? "on" : "off");
             mc.levelRenderer.allChanged();
         }
     }

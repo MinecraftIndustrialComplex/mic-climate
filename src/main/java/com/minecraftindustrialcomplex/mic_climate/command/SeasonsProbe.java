@@ -46,10 +46,15 @@ final class SeasonsProbe {
                 : LatitudeSeasons.temperateRule(lat) ? "temperate" : "no wet/dry cycle";
         SeasonsConfig.SeasonProperties melt = ModConfig.seasons.getSeasonProperties(here.discrete());
         return ClimateCommands.line("seasons", here.discrete().name(), String.format(Locale.ROOT,
-                "(%s; tropical wet/dry strength %.2f, temperate share %.2f, tropical biomes here: %s; SS temperature %.3f, level's %.3f, snow/ice below 0.15: %s; wheat %s, carrots %s; melt %.2f%% x%d; C %d, projection %s, hooks %d/4)",
+                "(%s; tropical wet/dry strength %.2f, temperate share %.2f, tropical biomes here: %s; SS temperature %.3f, level's %.3f, snow/ice below 0.15: %s; wheat %s, carrots %s; melt %.2f%% x%d; planet R %s, hooks %d/4)",
                 here.describe(), tropical, temperate, rule, t, levels, t < 0.15f ? "yes" : "no", fertile ? "grow" : "no",
-                offSeason ? "grow" : "no", melt.meltChance(), melt.meltRolls(), PlanetLatitude.circumference(level),
-                PlanetLatitude.projection(level).isEmpty() ? "-" : PlanetLatitude.projection(level), boundTargets()));
+                offSeason ? "grow" : "no", melt.meltChance(), melt.meltRolls(), planetRadius(level), boundTargets()));
+    }
+
+    /** The planet's radius for the probe line: kilometres, or "-" off a planet. */
+    private static String planetRadius(ServerLevel level) {
+        double r = PlanetLatitude.radiusMetres(level);
+        return r > 0.0 ? String.format(Locale.ROOT, "%.1f km", r / 1000.0) : "-";
     }
 
     /** How many of the four server-side Serene Seasons classes the hemisphere-season mixins reached. */

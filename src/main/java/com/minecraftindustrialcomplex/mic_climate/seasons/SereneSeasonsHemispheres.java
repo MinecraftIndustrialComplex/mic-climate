@@ -447,7 +447,7 @@ public final class SereneSeasonsHemispheres {
 
     /** Whether the hemisphere seasons apply anywhere in {@code level}. */
     public static boolean onPlanet(Level level) {
-        return PlanetLatitude.switchedOn() && PlanetLatitude.circumference(level) > 0;
+        return PlanetLatitude.switchedOn() && PlanetLatitude.radiusMetres(level) > 0.0;
     }
 
     /**
